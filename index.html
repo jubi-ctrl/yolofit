@@ -1,0 +1,1582 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111111">
+<!-- 教練課簽到 v33（未設定方案的學員也能看上課紀錄） -->
+<title>教練課簽到</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  /* ===== 設定：把 Apps Script 部署網址貼在 index.html 最下方的 API_URL ===== */
+  :root {
+    --ink: #111111;
+    --ink-2: #4a4a4a;
+    --ink-3: #8a8a8a;
+    --line: #e4e4e4;
+    --bg: #f6f6f4;
+    --card: #ffffff;
+    --accent: #1f6f5c;
+    --accent-soft: #e6f1ee;
+    --amber: #a86400;
+    --amber-soft: #fbf1e1;
+    --red: #b42318;
+    --red-soft: #fdecea;
+    --gray-soft: #efefef;
+    --r: 4px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "Noto Sans TC", -apple-system, "PingFang TC", sans-serif; font-size: 15px; line-height: 1.5; }
+  button, input, select { font: inherit; color: inherit; }
+  .hidden { display: none !important; }
+
+  /* Top bar */
+  .top { position: sticky; top: 0; z-index: 10; background: var(--ink); color: #fff;
+    padding: 14px 20px calc(14px); display: flex; align-items: center; justify-content: space-between; }
+  .brand { display: flex; flex-direction: column; }
+  .brand b { font-size: 17px; letter-spacing: .04em; }
+  .brand span { font-size: 12px; color: #b9b9b9; letter-spacing: .08em; }
+  .who { font-size: 13px; color: #d6d6d6; display: flex; gap: 10px; align-items: center; }
+  .who button { background: none; border: 1px solid #555; color: #d6d6d6; padding: 3px 8px; border-radius: var(--r); cursor: pointer; }
+
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 20px 16px 220px; }
+
+  /* Buttons */
+  .btn { border: 1px solid var(--ink); background: var(--ink); color: #fff; padding: 11px 20px;
+    border-radius: var(--r); cursor: pointer; font-weight: 500; }
+  .btn:disabled { opacity: .35; cursor: default; }
+  .btn.ghost { background: transparent; color: var(--ink); }
+  .btn.block { width: 100%; }
+
+  /* Login */
+  .login { max-width: 380px; margin: 12vh auto 0; background: var(--card); border: 1px solid var(--line);
+    border-radius: var(--r); padding: 32px 28px; }
+  .login h1 { font-size: 22px; margin: 0 0 4px; }
+  .login p { color: var(--ink-3); margin: 0 0 24px; font-size: 14px; }
+  .field { display: block; margin-bottom: 16px; }
+  .field span { display: block; font-size: 13px; color: var(--ink-2); margin-bottom: 6px; }
+  .field input, .field select { width: 100%; padding: 10px 12px; border: 1px solid #cfcfcf; border-radius: var(--r); background: #fff; }
+  .field input:focus, .field select:focus { outline: 2px solid var(--ink); outline-offset: -1px; }
+
+  /* Dropzone */
+  .drop { display: block; border: 1.5px dashed #bdbdbd; background: var(--card); border-radius: var(--r);
+    padding: 44px 20px; text-align: center; cursor: pointer; transition: border-color .15s, background .15s; }
+  .drop:hover, .drop.over { border-color: var(--ink); background: #fbfbfa; }
+  .drop svg { width: 40px; height: 40px; stroke: var(--ink); }
+  .drop h3 { margin: 12px 0 4px; font-size: 17px; }
+  .drop p { margin: 0; color: var(--ink-3); font-size: 13px; }
+
+  .picked { display: grid; grid-template-columns: 120px 1fr; gap: 16px; align-items: center;
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 12px; }
+  .picked img { width: 120px; height: 150px; object-fit: cover; border-radius: 2px; background: #eee; }
+  .picked .meta b { display: block; word-break: break-all; }
+  .picked .meta small { color: var(--ink-3); }
+  .picked .actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+
+  /* Progress */
+  .progress { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 24px; }
+  .step { display: flex; align-items: center; gap: 12px; padding: 8px 0; color: var(--ink-3); }
+  .step .dot { width: 18px; height: 18px; border-radius: 50%; border: 2px solid #cfcfcf; flex: none; }
+  .step.doing { color: var(--ink); }
+  .step.doing .dot { border-color: var(--ink); border-top-color: transparent; animation: spin .8s linear infinite; }
+  .step.done { color: var(--ink-2); }
+  .step.done .dot { background: var(--accent); border-color: var(--accent); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Review layout */
+  .review { display: grid; grid-template-columns: 1fr; gap: 20px; }
+  @media (min-width: 900px) { .review { grid-template-columns: 380px 1fr; align-items: start; }
+    .photo-pane { position: sticky; top: 80px; } }
+  .photo-pane { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 10px; }
+  .photo-pane img { width: 100%; max-height: 300px; object-fit: contain; display: block; border-radius: 2px; cursor: zoom-in; background: #f2f2f2; }
+  @media (min-width: 900px) { .photo-pane img { max-height: none; } }
+  .photo-pane small { display: block; color: var(--ink-3); margin-top: 6px; text-align: center; }
+
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); background: var(--card);
+    border: 1px solid var(--line); border-radius: var(--r); margin-bottom: 16px; }
+  .stat { padding: 14px 16px; border-left: 1px solid var(--line); }
+  .stat:first-child { border-left: none; }
+  .stat b { display: block; font-size: 30px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .stat span { font-size: 12px; color: var(--ink-3); letter-spacing: .05em; }
+  .stat.pay b { color: var(--accent); }
+  .stat.pend b { color: var(--amber); }
+  .stat.none b { color: var(--ink-3); }
+
+  .student-bar { display: flex; gap: 12px; align-items: end; margin-bottom: 16px; flex-wrap: wrap; }
+  .student-bar .field { margin: 0; flex: 1; min-width: 200px; }
+  .track-tag { display: inline-block; font-size: 11px; color: var(--ink-2); background: #ececec; padding: 1px 6px; border-radius: 2px; margin-left: 6px; vertical-align: 2px; text-decoration: none; }
+  .group-head { font-size: 15px; font-weight: 700; margin: 24px 0 8px; padding-top: 12px; border-top: 2px solid var(--ink); }
+  .group-head:first-child { margin-top: 4px; }
+  .hint { font-size: 12px; color: var(--ink-3); margin-bottom: 12px; }
+
+  /* Row cards */
+  .rows { display: flex; flex-direction: column; gap: 10px; }
+  .row { background: var(--card); border: 1px solid var(--line); border-left: 3px solid var(--line); border-radius: var(--r); padding: 12px 14px; }
+  .row.s-pay { border-left-color: var(--accent); }
+  .row.s-pend { border-left-color: var(--amber); }
+  .row.s-none { border-left-color: #c9c9c9; background: #fbfbfb; }
+  .row-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .no { font-size: 12px; color: var(--ink-3); width: 28px; font-variant-numeric: tabular-nums; }
+  .row-head input[type=date] { border: 1px solid #cfcfcf; border-radius: var(--r); padding: 6px 8px; background: #fff; }
+  .chip { margin-left: auto; font-size: 12px; padding: 3px 10px; border-radius: 2px; font-weight: 500; white-space: nowrap; }
+  .chip.pay { background: var(--accent-soft); color: var(--accent); }
+  .chip.pend { background: var(--amber-soft); color: var(--amber); }
+  .chip.none { background: var(--gray-soft); color: var(--ink-3); }
+  .row-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+  @media (min-width: 640px) { .row-grid { grid-template-columns: 1.2fr 1fr 1fr; } }
+  .row-grid label { font-size: 12px; color: var(--ink-3); display: block; }
+  .row-grid input[type=text], .row-grid select { width: 100%; padding: 7px 8px; border: 1px solid #d6d6d6; border-radius: var(--r); background: #fff; margin-top: 3px; }
+  .toggle { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 14px; color: var(--ink); }
+  .toggle input { width: 18px; height: 18px; accent-color: var(--ink); }
+  .note { grid-column: 1 / -1; }
+  .flags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .flag { font-size: 11px; padding: 2px 7px; border-radius: 2px; background: var(--amber-soft); color: var(--amber); }
+  .flag.red { background: var(--red-soft); color: var(--red); }
+
+  /* Sticky action bar */
+  .bar { position: fixed; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,.96);
+    border-top: 1px solid var(--line); padding: 12px 16px calc(84px + env(safe-area-inset-bottom)); z-index: 20; }
+  .bar-inner { max-width: 1080px; margin: 0 auto; display: flex; gap: 10px; align-items: center; }
+  .bar-inner .sum { flex: 1; font-size: 13px; color: var(--ink-2); }
+
+  /* Result */
+  .result { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 28px; }
+  .result h2 { margin: 0 0 16px; font-size: 20px; }
+  .result .stats { margin: 0 0 16px; }
+  .conflicts { background: var(--red-soft); color: var(--red); padding: 12px 14px; border-radius: var(--r); font-size: 14px; margin-bottom: 16px; white-space: pre-wrap; }
+
+  /* Toast & lightbox */
+  .toast { position: fixed; left: 50%; bottom: 180px; transform: translateX(-50%); background: var(--ink); color: #fff;
+    padding: 10px 16px; border-radius: var(--r); font-size: 14px; z-index: 50; max-width: 90vw; }
+  .toast.err { background: var(--red); }
+
+  /* Multi-photo picker */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; margin: 16px 0; }
+  .thumb { position: relative; background: var(--card); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; aspect-ratio: 3 / 4; }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .thumb .x { position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; border: none; border-radius: 2px;
+    background: rgba(17,17,17,.75); color: #fff; cursor: pointer; font-size: 15px; line-height: 26px; padding: 0; }
+  .thumb .idx { position: absolute; left: 0; bottom: 0; background: rgba(17,17,17,.75); color: #fff; font-size: 11px; padding: 2px 6px; }
+  .thumb.add { display: flex; align-items: center; justify-content: center; flex-direction: column; border: 1.5px dashed #bdbdbd;
+    color: var(--ink-3); cursor: pointer; font-size: 13px; gap: 4px; }
+  .thumb.add b { font-size: 26px; font-weight: 400; color: var(--ink); line-height: 1; }
+  .pick-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .pick-actions .count { color: var(--ink-2); font-size: 14px; margin-right: auto; }
+
+  /* Queue strip */
+  .queue { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 16px; }
+  .q { flex: none; width: 64px; text-align: center; font-size: 11px; color: var(--ink-3); }
+  .q .qi { width: 64px; height: 80px; border: 2px solid transparent; border-radius: var(--r); overflow: hidden; background: #eee; position: relative; }
+  .q .qi img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .q.cur .qi { border-color: var(--ink); }
+  .q.cur { color: var(--ink); font-weight: 500; }
+  .q.saved .qi::after, .q.skipped .qi::after, .q.error .qi::after {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 22px; color: #fff; }
+  .q.saved .qi::after { content: "✓"; background: rgba(31,111,92,.7); }
+  .q.skipped .qi::after { content: "–"; background: rgba(120,120,120,.7); }
+  .q.error .qi::after { content: "!"; background: rgba(180,35,24,.75); }
+  .sheet-title { display: flex; align-items: baseline; gap: 10px; margin: 0 0 12px; flex-wrap: wrap; }
+  .sheet-title h2 { margin: 0; font-size: 18px; }
+  .sheet-title span { color: var(--ink-3); font-size: 13px; }
+
+  /* Notices */
+  .notice { display: flex; gap: 10px; align-items: flex-start; background: var(--amber-soft); color: var(--amber);
+    border-left: 3px solid var(--amber); padding: 10px 14px; border-radius: var(--r); font-size: 14px; margin-bottom: 16px; }
+  .notice b { display: block; color: #7a4800; }
+  .notice svg { flex: none; width: 20px; height: 20px; margin-top: 2px; stroke: currentColor; }
+  .new-student { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--card); border: 1px solid var(--line);
+    border-left: 3px solid var(--ink); padding: 10px 14px; border-radius: var(--r); margin: -4px 0 16px; font-size: 14px; }
+  .new-student span { flex: 1; min-width: 180px; }
+  .new-student .btn { padding: 7px 14px; }
+  .done-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--accent-soft);
+    color: var(--accent); padding: 10px 14px; border-radius: var(--r); margin-bottom: 10px; font-size: 14px; }
+  .done-bar button { background: none; border: 1px solid var(--accent); color: var(--accent); padding: 4px 10px; border-radius: var(--r); cursor: pointer; }
+  #rows .row.done { display: none; }
+  #rows.show-done .row.done { display: block; opacity: .6; }
+  .chip.done { background: var(--accent-soft); color: var(--accent); }
+  .empty-new { background: var(--card); border: 1px dashed #bdbdbd; border-radius: var(--r); padding: 20px; text-align: center; color: var(--ink-3); }
+  .err-box { background: var(--red-soft); color: var(--red); padding: 16px; border-radius: var(--r); margin-bottom: 12px; white-space: pre-wrap; }
+
+  /* Done list */
+  .sum-list { margin: 0 0 16px; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: var(--r); }
+  .sum-list li { padding: 10px 14px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+  .sum-list li:last-child { border-bottom: none; }
+  .sum-list .muted { color: var(--ink-3); }
+  .sum-list li.clickable { cursor: pointer; }
+  .sum-list li.clickable:hover { background: #fafaf8; }
+  .sum-list li span:first-child { white-space: nowrap; }
+  .sum-list li span:last-child { text-align: right; font-size: 13px; }
+
+  /* Modal */
+  .modal { position: fixed; inset: 0; background: rgba(17,17,17,.55); z-index: 70; display: flex; align-items: flex-end; justify-content: center; }
+  @media (min-width: 640px) { .modal { align-items: center; } }
+  .modal-box { background: #fff; width: 100%; max-width: 480px; border-radius: var(--r) var(--r) 0 0; padding: 22px 20px calc(20px + env(safe-area-inset-bottom)); max-height: 92vh; overflow: auto; }
+  @media (min-width: 640px) { .modal-box { border-radius: var(--r); } }
+  .modal-box h3 { margin: 0 0 4px; font-size: 18px; }
+  .md-sub { margin: 0 0 16px; color: var(--ink-3); font-size: 14px; }
+  .md-check { display: flex; gap: 8px; align-items: center; margin: 4px 0 14px; font-size: 14px; }
+  .md-check input { width: 18px; height: 18px; accent-color: var(--ink); }
+  .md-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+  .md-note { font-size: 12px; color: var(--ink-3); margin: 0 0 16px; }
+  .md-warn { font-size: 12px; line-height: 1.5; color: var(--amber); background: var(--amber-soft); padding: 8px 10px; border-radius: var(--r); margin: 0 0 12px; }
+  .md-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+  /* Report */
+  .report-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+  .report-head input { padding: 9px 10px; border: 1px solid #cfcfcf; border-radius: var(--r); background: #fff; }
+  table.rpt { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); }
+  table.rpt th, table.rpt td { padding: 12px 16px; border-bottom: 1px solid var(--line); text-align: left; font-size: 16px; white-space: nowrap; }
+  table.rpt th { font-size: 12px; color: var(--ink-3); font-weight: 500; letter-spacing: .05em; }
+  table.rpt small { display: block; color: var(--amber); font-size: 12px; }
+  table.rpt .n { text-align: right; font-variant-numeric: tabular-nums; }
+  table.rpt tr.total td { font-weight: 700; border-bottom: none; }
+  @media (max-width: 639px) {
+    table.rpt th, table.rpt td { padding: 10px 8px; font-size: 14px; }
+    table.rpt th { font-size: 11px; }
+  }
+  td.note-cell { white-space: normal !important; font-size: 13px; color: var(--ink-2); min-width: 120px; }
+  .rpt-note { font-size: 12px; color: var(--ink-3); margin-top: 10px; }
+  .rtabs { display: flex; gap: 22px; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
+  .rtab { background: none; border: none; padding: 8px 2px; cursor: pointer; color: var(--ink-3); font-weight: 500; font-size: 15px; border-bottom: 2px solid transparent; }
+  .rtab.on { color: var(--ink); border-bottom-color: var(--ink); }
+  th.sortable { cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+  .remain-low { color: var(--amber); font-weight: 700; }
+  .remain-over { color: var(--red); font-weight: 700; }
+  .kpis { display: grid; grid-template-columns: repeat(2, 1fr); background: var(--card); border: 1px solid var(--line); border-radius: var(--r); margin-bottom: 10px; }
+  @media (min-width: 640px) { .kpis { grid-template-columns: repeat(5, 1fr); } }
+  .kpi { padding: 12px 14px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .kpi span { display: block; font-size: 12px; color: var(--ink-3); letter-spacing: .04em; }
+  .kpi b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; line-height: 1.3; }
+  .kpi.big b { font-size: 30px; }
+  .kpi.big { grid-column: 1 / -1; }
+  @media (min-width: 640px) { .kpi.big { grid-column: auto; } }
+  .kpi small { display: block; font-size: 12px; }
+  .plan-block { margin-bottom: 22px; }
+  .plan-head { font-size: 13px; color: var(--ink-3); margin: 0 0 6px; letter-spacing: .04em; }
+  details.plan-block > summary { cursor: pointer; font-size: 14px; color: var(--ink-2); margin-bottom: 10px; }
+  .chip-pend { display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 2px; background: var(--amber-soft); color: var(--amber); white-space: nowrap; }
+  .chip-ok { display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 2px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+  .sess-bar { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin: 8px 0; flex-wrap: wrap; }
+  .sess-hint { font-size: 12px; color: var(--ink-3); margin-right: auto; }
+  .sess-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table.rpt.editing td { padding: 6px 4px; }
+  table.rpt.editing td:first-child { padding-left: 10px; }
+  .cell-in { font: inherit; font-size: 14px; padding: 6px 4px; border: 1px solid #cfcfcf; border-radius: var(--r); background: #fff; max-width: 100%; }
+  tr.row-changed td { background: #fff8e1; }
+  tr.row-removed td { color: var(--ink-3); text-decoration: line-through; }
+  .photo-btn { background: none; border: 1px solid #cfcfcf; border-radius: var(--r); padding: 3px 9px; cursor: pointer; font-size: 13px; white-space: nowrap; }
+  .sd-head { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  .sd-head .rpt-title { margin: 0; }
+  .btn.sm { padding: 5px 12px; font-size: 13px; }
+  a.edit-link { color: var(--ink-2); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; font-size: 13px; }
+  .link-btn { background: none; border: none; padding: 0; color: var(--ink-2); cursor: pointer; font-size: 14px; margin-bottom: 12px; }
+  table.rpt td a { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+  table.rpt td.warn { color: var(--amber); font-size: 13px; }
+  a.set-fee, table.rpt td a.set-fee { color: var(--amber); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; white-space: nowrap; }
+  table.rpt td a.set-fee.over { color: var(--red); }
+  .rpt-title { font-size: 20px; margin: 0 0 8px; }
+  .rpt-lines { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; margin-bottom: 12px; font-size: 15px; line-height: 1.9; }
+  .rpt-lines b { font-size: 20px; }
+
+  /* Photo viewer */
+  .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.92); z-index: 90; overflow: auto; display: flex; align-items: center; justify-content: center; }
+  .lightbox img { display: block; max-width: 100vw; max-height: 100vh; max-height: 100dvh; width: auto; height: auto; object-fit: contain; cursor: zoom-in; }
+  .lightbox.zoom { display: block; }
+  .lightbox.zoom img { max-width: none; max-height: none; width: 200vw; cursor: zoom-out; }
+  @media (min-width: 900px) { .lightbox.zoom img { width: 160vw; } }
+  .lb-close { position: fixed; top: calc(12px + env(safe-area-inset-top)); right: 12px; z-index: 91; width: 44px; height: 44px; border: none; border-radius: 50%;
+    background: rgba(255,255,255,.92); color: #111; font-size: 26px; line-height: 44px; text-align: center; cursor: pointer; padding: 0; }
+  .lb-hint { position: fixed; bottom: calc(14px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); z-index: 91; color: #ddd; font-size: 12px; background: rgba(0,0,0,.5); padding: 4px 10px; border-radius: 2px; }
+
+  .stu-search { position: relative; margin-bottom: 12px; }
+  .stu-search input { width: 100%; box-sizing: border-box; font: inherit; font-size: 16px; padding: 11px 40px 11px 14px; border: 1px solid #cfcfcf; border-radius: var(--r); background: #fff; -webkit-appearance: none; appearance: none; }
+  .stu-search input:focus { outline: 2px solid var(--ink); outline-offset: -1px; }
+  .stu-search input::-webkit-search-cancel-button { display: none; }
+  .stu-qx { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); border: none; background: none; font-size: 22px; color: var(--ink-3); width: 36px; height: 36px; cursor: pointer; }
+  /* ===== 手機版面優化 v28 ===== */
+  input[type=date] { -webkit-appearance: none; appearance: none; min-width: 0; max-width: 100%; box-sizing: border-box; min-height: 42px; text-align: left; }
+  input[type=date]::-webkit-date-and-time-value { text-align: left; margin: 0; }
+  .md-grid > * { min-width: 0; }
+  .field input, .field select { box-sizing: border-box; min-height: 44px; font-size: 16px; }
+  .sess-bar.editing { position: sticky; top: var(--top-h, 72px); z-index: 5; background: var(--bg); padding: 8px 0; margin: 0; }
+  @media (max-width: 640px) {
+    .modal-box { padding-bottom: calc(140px + env(safe-area-inset-bottom)); }
+    .md-actions .btn { flex: 1; }
+    .sess-scroll { overflow: visible; }
+    table.rpt.editing thead { display: none; }
+    table.rpt.editing, table.rpt.editing tbody { display: block; }
+    table.rpt.editing tr { display: grid; grid-template-columns: 26px 1fr 1fr; grid-template-areas: "n d p" ". c s"; gap: 8px; padding: 12px 12px 12px 8px; border-bottom: 1px solid var(--line); align-items: center; }
+    table.rpt.editing td { display: block; padding: 0 !important; border: none; min-width: 0; white-space: normal; }
+    table.rpt.editing td:nth-child(1) { grid-area: n; color: var(--ink-3); font-size: 13px; }
+    table.rpt.editing td:nth-child(2) { grid-area: d; }
+    table.rpt.editing td:nth-child(3) { grid-area: c; }
+    table.rpt.editing td:nth-child(4) { grid-area: s; }
+    table.rpt.editing td:nth-child(5) { grid-area: p; text-align: right; }
+    table.rpt.editing .cell-in { width: 100%; box-sizing: border-box; min-height: 42px; font-size: 16px; padding: 8px 10px; }
+    .sess-hint { flex-basis: 100%; margin: 0 0 4px; }
+    .sess-bar.editing .btn { flex: 1; }
+    .sess-bottom { padding-bottom: 90px; }
+    #stuBody .track-tag { display: table; margin: 4px 0 0; }
+    /* 上傳確認的送出列：手機改放在標題列下方，不會被 Safari 工具列和 Netlify 標籤擋住 */
+    .bar { top: var(--top-h, 72px); bottom: auto; border-top: none; border-bottom: 1px solid var(--line); padding: 8px 16px; box-shadow: 0 2px 6px rgba(0,0,0,.06); }
+    .bar-inner { gap: 8px; }
+    .bar-inner .sum { font-size: 12px; line-height: 1.4; }
+    .bar-inner .btn { padding: 9px 14px; font-size: 15px; }
+    body.has-bar main { padding-top: 64px; }
+    body.has-bar { padding-bottom: 96px; }
+    table.rpt.editing tr.row-changed { background: #fff8e1; }
+    table.rpt.editing tr.row-changed td { background: transparent; }
+  }
+</style>
+</head>
+<body>
+
+<!-- 登入 -->
+<section id="loginView" class="hidden">
+  <div class="login">
+    <h1>教練課簽到</h1>
+    <p>請輸入存取碼與你的名字</p>
+    <label class="field"><span>存取碼</span><input id="inCode" type="password" autocomplete="current-password"></label>
+    <label class="field"><span>你的名字（會記錄為確認者）</span><input id="inName" type="text" autocomplete="name"></label>
+    <button class="btn block" id="btnLogin">進入</button>
+  </div>
+</section>
+
+<!-- 主畫面 -->
+<section id="appView" class="hidden">
+  <header class="top">
+    <div class="brand"><b>教練課簽到</b><span>SIGN-IN SHEET PROCESSING</span></div>
+    <div class="who"><span id="whoName"></span><button id="btnReport">報表</button><button id="btnLogout">登出</button></div>
+  </header>
+
+  <main class="wrap">
+    <input type="file" id="file" accept="image/*" multiple hidden>
+
+    <!-- 報表 -->
+    <div id="stReport" class="hidden">
+      <div class="report-head">
+        <button class="btn ghost" id="btnBack">← 返回上傳</button>
+        <input type="month" id="inMonth">
+      </div>
+      <nav class="rtabs">
+        <button class="rtab on" data-v="coach">教練</button>
+        <button class="rtab" data-v="students">學員</button>
+      </nav>
+
+      <div id="rptSummary">
+        <table class="rpt">
+          <thead><tr><th>教練</th><th class="n">總堂數</th><th class="n">金額</th></tr></thead>
+          <tbody id="rptBody"></tbody>
+        </table>
+        <p class="rpt-note">點教練名字可看明細。只計算狀態為「計薪」的課；金額依「學員方案」的單堂原價 × 教練分成比例計算。</p>
+      </div>
+
+      <div id="rptDetail" class="hidden">
+        <button class="link-btn" id="btnBackSummary">← 所有教練</button>
+        <h2 class="rpt-title" id="dtTitle"></h2>
+        <div class="rpt-lines" id="dtLines"></div>
+        <div class="err-box hidden" id="dtMissing"></div>
+        <table class="rpt">
+          <thead><tr><th>日期</th><th>學生姓名</th><th class="n">課費</th></tr></thead>
+          <tbody id="dtBody"></tbody>
+        </table>
+      </div>
+
+      <div id="rptStudents" class="hidden">
+        <div class="stu-search"><input id="stuQ" type="search" placeholder="搜尋學員姓名" autocomplete="off" enterkeyhint="search"><button id="stuQx" class="stu-qx hidden" aria-label="清除">×</button></div>
+        <table class="rpt">
+          <thead><tr><th>學員</th><th class="n sortable" id="thRemain">剩餘堂數 ↑</th><th class="n">已上／購買</th><th class="n">最近上課</th></tr></thead>
+          <tbody id="stuBody"></tbody>
+        </table>
+        <p class="rpt-note">剩餘堂數依「學員方案」最新一筆計算；學生有簽到就算已上（含教練尚未簽名的課）。點「剩餘堂數」可切換排序。</p>
+      </div>
+
+      <div id="rptStudent" class="hidden">
+        <button class="link-btn" id="btnBackStudent">← 返回</button>
+        <div class="sd-head"><h2 class="rpt-title" id="sdTitle"></h2><button class="btn ghost sm" id="btnEditPlan">編輯方案</button></div>
+        <div id="sdBody"></div>
+      </div>
+    </div>
+
+    <!-- 選照片 -->
+    <div id="stPick">
+      <label class="drop" id="drop" for="file">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h3l2-3h8l2 3h3v13H3z"/><circle cx="12" cy="13" r="4"/></svg>
+        <h3>拍照或選擇簽到表照片</h3>
+        <p>可一次選多張，每張請讓整張表完整入鏡</p>
+      </label>
+      <div id="picked" class="hidden">
+        <div class="grid" id="grid"></div>
+        <div class="pick-actions">
+          <span class="count" id="pickCount"></span>
+          <button class="btn ghost" id="btnClear">清除</button>
+          <button class="btn" id="btnStart">開始辨識</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 確認 -->
+    <div id="stReview" class="hidden">
+      <div class="notice hidden" id="notice">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+        <div><b>處理中，請勿離開或重新整理此頁面</b><span id="noticeText"></span></div>
+      </div>
+      <div class="queue" id="queue"></div>
+      <div class="sheet-title"><h2 id="sheetTitle"></h2><span id="sheetSub"></span></div>
+
+      <div id="curWaiting" class="progress hidden">
+        <div class="step doing"><span class="dot"></span><span id="waitText">AI 辨識中（約 10–30 秒）</span></div>
+      </div>
+
+      <div id="curError" class="hidden">
+        <div class="err-box" id="errText"></div>
+        <button class="btn" id="btnRetry">重新辨識</button>
+      </div>
+
+      <div id="curReady" class="review hidden">
+        <div class="photo-pane">
+          <img id="reviewImg" alt="簽到表照片">
+          <small>點圖片可放大</small>
+        </div>
+        <div>
+          <div class="stats">
+            <div class="stat pay"><b id="nPay">0</b><span>計薪</span></div>
+            <div class="stat pend"><b id="nPend">0</b><span>待確認</span></div>
+            <div class="stat none"><b id="nNone">0</b><span>不計</span></div>
+          </div>
+          <div class="student-bar">
+            <label class="field"><span>學員</span><input id="inStudent" type="text" list="studentList" autocomplete="off"></label>
+            <label class="field"><span>這張是哪位教練的課表（扣這位教練的方案）</span><select id="inSheetCoach"></select></label>
+            <datalist id="studentList"></datalist>
+          </div>
+          <div class="new-student hidden" id="newStudent">
+            <span id="newStudentText"></span>
+            <button class="btn ghost" id="btnAddStudent">新增</button>
+          </div>
+          <div class="hint">黃色標籤代表需要人工確認的地方。教練選「待指派」會存成待確認、不計薪；學生簽到沒勾的存成不計。</div>
+          <div class="done-bar hidden" id="doneBar"><span id="doneText"></span><button id="btnToggleDone">展開</button></div>
+          <div class="empty-new hidden" id="emptyNew">這張表沒有新的上課紀錄，可以直接按「確認送出」或「略過」。</div>
+          <div class="rows" id="rows"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 完成 -->
+    <div id="stDone" class="result hidden">
+      <h2>全部處理完成</h2>
+      <div class="stats">
+        <div class="stat pay"><b id="rAdded">0</b><span>新增</span></div>
+        <div class="stat pend"><b id="rUpdated">0</b><span>更新</span></div>
+        <div class="stat none"><b id="rSame">0</b><span>未變動</span></div>
+      </div>
+      <ul class="sum-list" id="doneList"></ul>
+      <div id="rConflicts" class="conflicts hidden"></div>
+      <button class="btn" id="btnNext">繼續上傳</button>
+    </div>
+
+    <!-- 回看已送出的某一張 -->
+    <div id="stSaved" class="hidden">
+      <button class="link-btn" id="btnSvBack">← 回到處理結果</button>
+      <div class="sheet-title"><h2 id="svTitle"></h2><span id="svSub"></span></div>
+      <div class="review">
+        <div class="photo-pane">
+          <img id="svImg" alt="簽到表照片">
+          <small>點圖片可放大</small>
+        </div>
+        <div>
+          <table class="rpt">
+            <thead><tr><th>日期</th><th>教練</th><th>狀態</th><th>備註</th></tr></thead>
+            <tbody id="svBody"></tbody>
+          </table>
+          <p class="rpt-note">這裡顯示的是送出時的內容。發現錯誤時，可以直接到 Google Sheet 的「上課紀錄」修改，或到學員頁確認。</p>
+          <button class="btn ghost" id="btnSvStudent">到學員頁查看 ›</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div class="bar hidden" id="bar">
+    <div class="bar-inner">
+      <div class="sum" id="barSum"></div>
+      <button class="btn ghost" id="btnSkip">略過</button>
+      <button class="btn" id="btnSave">確認送出</button>
+    </div>
+  </div>
+</section>
+
+<div id="modal" class="modal hidden">
+  <div class="modal-box">
+    <h3 id="mdTitle">新增學員資料</h3>
+    <p class="md-sub" id="mdSub"></p>
+    <label class="field"><span>學員姓名</span><input id="mdName" type="text"></label>
+    <label class="field"><span>適用教練（同一學員和不同教練各買方案時才需要選）</span><select id="mdCoach"></select></label>
+    <div class="md-grid">
+      <label class="field"><span>堂數方案（數量）</span><input id="mdTotal" type="number" min="0" inputmode="numeric" placeholder="例如 16"></label>
+      <label class="field"><span>單堂價格</span><input id="mdPrice" type="number" min="0" inputmode="numeric" placeholder="可先留空"></label>
+    </div>
+    <p class="md-warn hidden" id="mdPriceWarn">單堂價格還沒填：可以先儲存，但這位學員的課在教練報表會顯示「未設定課費」，金額不會算進去。之後可到學員頁「編輯方案」補填。</p>
+    <p class="md-note" id="mdStartNote"></p>
+    <div class="md-actions">
+      <button class="btn ghost" id="mdLater">取消</button>
+      <button class="btn" id="mdOk">新增</button>
+    </div>
+  </div>
+</div>
+
+<div id="editModal" class="modal hidden">
+  <div class="modal-box">
+    <h3 id="edTitle">編輯方案</h3>
+    <p class="md-sub">修改後會直接寫回 Google Sheet 的「學員方案」。</p>
+    <div class="md-grid">
+      <label class="field" style="grid-column:1/-1"><span>適用教練</span><select id="edCoach"></select></label>
+      <label class="field"><span>第一堂課</span><input id="edStart" type="date"></label>
+      <label class="field"><span>購買堂數</span><input id="edTotal" type="number" min="0" inputmode="numeric" placeholder="空白＝不限"></label>
+      <label class="field"><span>單堂價格</span><input id="edPrice" type="number" min="0" inputmode="numeric"></label>
+      <label class="field"><span>已上堂數</span><input id="edUsed" type="number" min="0" inputmode="numeric"></label>
+    </div>
+    <p class="md-warn hidden" id="edPriceWarn">單堂價格還沒填：可以先儲存，但這個方案的課在教練報表會顯示「未設定課費」，金額不會算進去。</p>
+    <p class="md-note" id="edNote"></p>
+    <div class="md-actions">
+      <button class="btn ghost" id="edCancel">取消</button>
+      <button class="btn" id="edOk">儲存</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+<div id="lightbox" class="lightbox hidden"><button class="lb-close" id="lbClose" aria-label="關閉">×</button><img id="lightImg" alt=""><div class="lb-hint">點圖片放大／縮小</div></div>
+
+<script>
+/* ======== 設定：Apps Script 網頁應用程式網址（結尾是 /exec） ======== */
+const API_URL = 'https://script.google.com/macros/s/AKfycbxv0I6NWKBHDA0vfDOJtIE57SsyftnkC0uU6M2fiT5CD6jl1f_nPC6eGXH8lE8dDpIAaw/exec';
+
+const $ = id => document.getElementById(id);
+const setTopH = () => { const h = document.querySelector('.top'); if (h) document.documentElement.style.setProperty('--top-h', h.offsetHeight + 'px'); };
+window.addEventListener('resize', setTopH); setTimeout(setTopH, 0);
+const S = { code: '', name: '', items: [], cur: -1, coaches: [], students: [], running: false };
+// item: { file, url, status: waiting|processing|ready|error|saved|skipped, data, error, saveResult }
+
+/* ---------- 工具 ---------- */
+function el(tag, attrs = {}, children = []) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') e.className = v;
+    else if (k === 'on') Object.entries(v).forEach(([ev, fn]) => e.addEventListener(ev, fn));
+    else if (k in e) e[k] = v;
+    else e.setAttribute(k, v);
+  }
+  [].concat(children).filter(c => c !== null && c !== undefined && c !== false).forEach(c => e.append(c));
+  return e;
+}
+let toastTimer;
+function toast(text, isErr) {
+  const t = $('toast');
+  t.textContent = text;
+  t.className = 'toast' + (isErr ? ' err' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.add('hidden'), isErr ? 6000 : 3000);
+}
+function store(k, v) { try { v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} }
+function load(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
+
+const READ_ONLY = ['init', 'summary', 'coachDetail', 'students', 'studentDetail', 'photo', 'existing'];
+async function api(action, body = {}) {
+  // 讀取類請求遇到網路中斷（iPhone 顯示 Load failed）自動重試 2 次
+  const tries = READ_ONLY.includes(action) ? 3 : 1;
+  let res;
+  for (let k = 0; k < tries; k++) {
+    try {
+      res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action, accessCode: S.code, ...body }) });
+      break;
+    } catch (e) {
+      if (k === tries - 1) throw new Error('連線中斷，請確認網路後再試一次（伺服器可能剛重新部署或暫時忙碌）');
+      await new Promise(r => setTimeout(r, 1500 * (k + 1)));
+    }
+  }
+  let j;
+  try { j = await res.json(); } catch (e) { throw new Error('伺服器回應格式錯誤，請確認 API_URL 是否正確'); }
+  if (!j.ok) { const err = new Error(j.error || '發生錯誤'); err.busy = !!j.busy; err.quota = !!j.quota; throw err; }
+  return j.data;
+}
+
+/* ---------- 登入 ---------- */
+async function login(code, name, silent) {
+  S.code = code; S.name = name;
+  try {
+    const d = await api('init');
+    S.coaches = d.coaches; S.students = d.students; S.coachAliases = d.coachAliases || {};
+    store('pt_code', code); store('pt_name', name);
+    $('whoName').textContent = name;
+    $('loginView').classList.add('hidden');
+    $('appView').classList.remove('hidden');
+  } catch (e) {
+    store('pt_code', null);
+    $('loginView').classList.remove('hidden');
+    $('appView').classList.add('hidden');
+    if (!silent) toast(e.message, true);
+  }
+}
+$('btnLogin').onclick = () => {
+  const code = $('inCode').value.trim(), name = $('inName').value.trim();
+  if (!code || !name) return toast('請輸入存取碼和名字', true);
+  $('btnLogin').disabled = true;
+  login(code, name).finally(() => $('btnLogin').disabled = false);
+};
+$('btnLogout').onclick = () => {
+  if (S.running && !confirm('還有照片在處理中，確定要登出？')) return;
+  store('pt_code', null); location.reload();
+};
+
+/* ---------- 階段切換 ---------- */
+function show(stage) {
+  ['stPick', 'stReview', 'stDone', 'stSaved'].forEach(id => $(id).classList.toggle('hidden', id !== stage));
+  $('bar').classList.add('hidden'); document.body.classList.remove('has-bar');
+  window.scrollTo({ top: 0 });
+}
+
+/* ---------- 選照片（多張） ---------- */
+function addFiles(list) {
+  const files = [...list].filter(f => f.type.startsWith('image/') || /\.(heic|heif)$/i.test(f.name));
+  if (!files.length) return toast('請選擇圖片檔', true);
+  files.forEach(f => S.items.push({ file: f, url: URL.createObjectURL(f), status: 'waiting' }));
+  renderPicked();
+}
+function renderPicked() {
+  const has = S.items.length > 0;
+  $('drop').classList.toggle('hidden', has);
+  $('picked').classList.toggle('hidden', !has);
+  const g = $('grid');
+  g.innerHTML = '';
+  S.items.forEach((it, i) => g.append(el('div', { class: 'thumb' }, [
+    el('img', { src: it.url, alt: '' }),
+    el('span', { class: 'idx', textContent: i + 1 }),
+    el('button', { class: 'x', textContent: '×', title: '移除', on: { click: () => { URL.revokeObjectURL(it.url); S.items.splice(i, 1); renderPicked(); } } }),
+  ])));
+  g.append(el('label', { class: 'thumb add', htmlFor: 'file' }, [el('b', { textContent: '+' }), '再加照片']));
+  $('pickCount').textContent = `已選 ${S.items.length} 張`;
+}
+$('file').onchange = e => { addFiles(e.target.files); e.target.value = ''; };
+const drop = $('drop');
+['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => addFiles(e.dataTransfer.files));
+$('btnClear').onclick = () => { S.items.forEach(it => URL.revokeObjectURL(it.url)); S.items = []; renderPicked(); };
+
+/* ---------- 辨識佇列（一次一張，背景依序處理） ---------- */
+async function resizeImage(url, maxSide = 2200, quality = 0.86) {
+  const img = await new Promise((res, rej) => {
+    const i = new Image();
+    i.onload = () => res(i);
+    i.onerror = () => rej(new Error('無法讀取這張照片，請改用 JPG 或 PNG'));
+    i.src = url;
+  });
+  const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(img.width * scale);
+  c.height = Math.round(img.height * scale);
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', quality).split(',')[1];
+}
+
+async function runQueue() {
+  if (S.running) return;
+  S.running = true;
+  try {
+    let it;
+    while ((it = S.items.find(x => x.status === 'waiting'))) {
+      it.status = 'processing';
+      refresh();
+      const waits = [5, 15, 30]; // 秒
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const b64 = it.b64 || (it.b64 = await resizeImage(it.url));
+          const data = await api('process', {
+            image: b64, mimeType: 'image/jpeg',
+            fileName: it.file.name.replace(/\.\w+$/, '') + '.jpg',
+          });
+          it.data = data;
+          S.coaches = data.coaches; S.students = data.students; S.coachAliases = data.coachAliases || S.coachAliases || {};
+          it.status = 'ready';
+          it.note = '';
+          break;
+        } catch (e) {
+          const retryable = e.busy || e instanceof TypeError; // TypeError = 網路中斷（Load failed / Failed to fetch）
+          if (retryable && attempt < waits.length) {
+            for (let s = waits[attempt]; s > 0; s--) {
+              it.note = `${e.busy ? 'AI 忙碌' : '連線中斷'}，${s} 秒後自動重試（第 ${attempt + 1} / ${waits.length} 次）`;
+              refresh();
+              await new Promise(r => setTimeout(r, 1000));
+            }
+            it.note = '重新辨識中…';
+            refresh();
+            continue;
+          }
+          it.status = 'error';
+          it.error = e.busy ? 'AI 目前很忙，自動重試 3 次仍失敗，請稍後再按「重新辨識」。'
+                   : (e instanceof TypeError ? '網路連線中斷，請確認網路後按「重新辨識」。' : e.message);
+          it.note = '';
+          if (e.quota) S.items.filter(x => x.status === 'waiting').forEach(x => { x.status = 'error'; x.error = e.message; });
+          break;
+        }
+      }
+      refresh();
+    }
+  } finally {
+    S.running = false;
+  }
+}
+
+$('btnStart').onclick = () => {
+  if (!S.items.length) return;
+  S.cur = 0;
+  show('stReview');
+  refresh();
+  runQueue();
+};
+
+/* ---------- 確認畫面 ---------- */
+function statusOf(studentSigned, coach) {
+  if (!studentSigned) return { key: 'none', label: '不計' };
+  if (!coach) return { key: 'pend', label: '待確認' };
+  return { key: 'pay', label: '計薪' };
+}
+
+let renderedIndex = -1;
+function refresh() {
+  if ($('stReview').classList.contains('hidden')) return;
+  updateNotice();
+  renderQueue();
+  const it = S.items[S.cur];
+  if (!it) return;
+  $('sheetTitle').textContent = `第 ${S.cur + 1} / ${S.items.length} 張`;
+  $('sheetSub').textContent = it.file.name;
+
+  const ready = it.status === 'ready';
+  $('curWaiting').classList.toggle('hidden', !(it.status === 'waiting' || it.status === 'processing'));
+  $('waitText').textContent = it.status === 'processing' ? (it.note || 'AI 辨識中（約 10–30 秒）') : '排隊中，前一張辨識完就會開始';
+  $('curError').classList.toggle('hidden', it.status !== 'error');
+  if (it.status === 'error') $('errText').textContent = '辨識失敗：' + it.error;
+  $('curReady').classList.toggle('hidden', !ready);
+  $('bar').classList.remove('hidden'); document.body.classList.add('has-bar'); setTopH();
+  $('btnSave').disabled = !ready;
+  $('btnSave').textContent = S.cur === S.items.length - 1 ? '確認送出' : '確認送出，下一張';
+
+  if (ready && renderedIndex !== S.cur) { renderReview(it); renderedIndex = S.cur; }
+  if (!ready) { renderedIndex = -1; $('barSum').textContent = it.status === 'error' ? '可重新辨識或略過這張' : '等待辨識結果…'; }
+  else recount();
+}
+
+/* ---------- 處理中提示＋螢幕保持開啟 ---------- */
+let wakeLock = null;
+async function keepAwake(on) {
+  try {
+    if (on && !wakeLock && 'wakeLock' in navigator && document.visibilityState === 'visible') {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    } else if (!on && wakeLock) {
+      await wakeLock.release();
+      wakeLock = null;
+    }
+  } catch (e) { /* 不支援或被拒絕時忽略 */ }
+}
+function updateNotice() {
+  const running = S.items.filter(it => ['waiting', 'processing'].includes(it.status)).length;
+  const unsaved = S.items.filter(it => it.status === 'ready').length;
+  const show = running + unsaved > 0;
+  $('notice').classList.toggle('hidden', !show);
+  const parts = [];
+  if (running) parts.push(`還有 ${running} 張辨識中`);
+  if (unsaved) parts.push(`${unsaved} 張尚未送出`);
+  $('noticeText').textContent = parts.join('、') + '。切換到其他 App、鎖定螢幕或關閉網頁，進度可能中斷或遺失。';
+  keepAwake(running > 0);
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') updateNotice(); });
+
+function renderQueue() {
+  const q = $('queue');
+  q.innerHTML = '';
+  const label = { waiting: '排隊', processing: '辨識中', ready: '待確認', error: '失敗', saved: '已存', skipped: '略過' };
+  S.items.forEach((it, i) => q.append(el('div', { class: `q ${it.status}${i === S.cur ? ' cur' : ''}` }, [
+    el('div', { class: 'qi' }, el('img', { src: it.url, alt: '' })),
+    el('div', { textContent: `${i + 1}・${label[it.status]}` }),
+  ])));
+}
+
+function renderReview(it) {
+  const r = it.data.result;
+  $('reviewImg').src = it.url;
+  $('inStudent').value = r.student || '';
+  fillSheetCoach(r);
+  fillStudentList();
+  checkStudent();
+  renderRows(it);
+  window.scrollTo({ top: 0 });
+}
+
+// 依「日期＋當日第幾堂」比對已入帳紀錄（與後端寫入時的去重複規則一致）
+function prevMonthStart() {
+  const d = new Date();
+  return `${d.getMonth() === 0 ? d.getFullYear() - 1 : d.getFullYear()}-${String(d.getMonth() === 0 ? 12 : d.getMonth()).padStart(2, '0')}-01`;
+}
+function renderRows(it) {
+  const r = it.data.result;
+  const map = {}, others = {};
+  const pc = ck(sheetCoach());
+  (it.data.existing || []).forEach(e => {
+    const epc = ck(e.planCoach || e.coach);
+    if (epc === pc || (!e.planCoach && !e.coach)) map[e.date + '|' + e.seq] = e;
+    else if (e.status !== '不計') (others[e.date] = others[e.date] || new Set()).add(e.planCoach || e.coach);
+  });
+  const seq = {};
+  const box = $('rows');
+  box.innerHTML = '';
+  box.classList.remove('show-done');
+  let doneCount = 0;
+  r.rows.forEach(row => {
+    let prev = null;
+    if (row.date) { seq[row.date] = (seq[row.date] || 0) + 1; prev = map[row.date + '|' + seq[row.date]] || null; }
+    const card = rowCard(row, prev, row.date && !prev && others[row.date] ? [...others[row.date]] : null);
+    if (card.classList.contains('done')) doneCount++;
+    box.append(card);
+  });
+  $('doneBar').classList.toggle('hidden', doneCount === 0);
+  $('doneText').textContent = `已入帳 ${doneCount} 筆（先前已確認），已收合`;
+  $('btnToggleDone').textContent = '展開';
+  $('emptyNew').classList.toggle('hidden', doneCount < r.rows.length);
+  recount();
+  checkStudent();
+}
+$('inSheetCoach').addEventListener('change', () => { const it = S.items[S.cur]; if (it && it.status === 'ready') renderRows(it); });
+$('btnToggleDone').onclick = () => {
+  const on = $('rows').classList.toggle('show-done');
+  $('btnToggleDone').textContent = on ? '收合' : '展開';
+};
+
+function fillStudentList() {
+  const dl = $('studentList');
+  dl.innerHTML = '';
+  S.students.forEach(s => dl.append(el('option', { value: s })));
+}
+function newSignedCount() {
+  return [...document.querySelectorAll('#rows .row:not(.done)')].filter(c => c.querySelector('.f-signed').checked && !c.dataset.prev).length;
+}
+function checkStudent() {
+  const name = $('inStudent').value.trim();
+  const it = S.items[S.cur];
+  const isNew = name && !S.students.includes(name);
+  const pi = curPlanInfo(it);
+  const sc = sheetCoach();
+  const noAny = name && !isNew && it && it.data && it.data.hasPlan === false;
+  const noPlan = name && !isNew && !noAny && pi && !pi.hasPlan; // 有其他教練的方案，但沒有這位教練的
+  const overN = !isNew && !noAny && !noPlan && pi && pi.remaining !== null ? pi.used + newSignedCount() - pi.bought : 0;
+  const over = overN > 0;
+  const mixed = !isNew && !noAny && !noPlan && !over && sc && pi && pi.group === '' && (pi.otherCoaches || []).length > 0;
+  $('newStudent').classList.toggle('hidden', !(isNew || noAny || noPlan || over || mixed));
+  S.barMode = over ? 'renew' : 'new';
+  S.barCoach = over ? (pi.group || '') : ((noPlan || mixed) ? sc : '');
+  $('btnAddStudent').textContent = over ? '新增續約方案' : (noPlan || mixed ? `新增${sc}的方案` : '新增');
+  if (isNew) $('newStudentText').textContent = `資料庫還沒有「${name}」這位學員的資料，是否現在新增？`;
+  else if (noAny) $('newStudentText').textContent = `資料庫還沒有「${name}」的方案資料，是否現在新增？`;
+  else if (noPlan) $('newStudentText').textContent = `「${name}」還沒有${sc}的方案，是否現在新增？`;
+  else if (over) $('newStudentText').textContent = `「${name}」${pi.group ? pi.group + '的' : '的'}方案已用完，超出 ${overN} 堂，是否有續約？現在新增續約方案。`;
+  else if (mixed) $('newStudentText').textContent = `「${name}」的方案沒有指定教練，目前已有${pi.otherCoaches.join('、')}的課在扣。這張是${sc}的課，如果是另外購買的方案，請新增${sc}的方案；同一個方案就不用理會。`;
+}
+$('inStudent').addEventListener('input', checkStudent);
+$('inStudent').addEventListener('change', async () => {
+  const it = S.items[S.cur];
+  if (!it || it.status !== 'ready') return;
+  try {
+    const d = await api('existing', { student: $('inStudent').value.trim() });
+    it.data.existing = d.existing;
+    it.data.hasPlan = d.hasPlan;
+    it.data.planInfo = d.planInfo;
+    it.data.planInfoBy = d.planInfoBy;
+    checkStudent();
+    renderRows(it);
+  } catch (e) { toast('查詢已入帳紀錄失敗：' + e.message, true); }
+});
+/* ---------- 新學員彈窗：加入學員名單＋學員方案 ---------- */
+function openStudentModal(opts) {
+  // opts 不帶 = 從上傳確認畫面開啟；帶 { name, start, from: 'report' } = 從報表開啟
+  let name, total = '', start = '';
+  const renew = opts && opts.mode === 'renew';
+  if (opts && opts.from === 'report') {
+    name = opts.name; start = opts.start || '';
+    S.mdFrom = 'report';
+  } else if (renew) {
+    const it = S.items[S.cur];
+    name = $('inStudent').value.trim();
+    total = it && it.data ? (it.data.result.plan_sessions || '') : '';
+    S.mdFrom = 'upload';
+  } else {
+    const it = S.items[S.cur];
+    if (!it || !it.data) return;
+    const r = it.data.result;
+    const first = (r.rows || []).find(x => x.date);
+    name = $('inStudent').value.trim();
+    total = r.plan_sessions || '';
+    start = first ? first.date : '';
+    S.mdFrom = 'upload';
+  }
+  S.mdStart = start;
+  fillCoachSelect($('mdCoach'), (opts && opts.coach) || '');
+  $('mdTitle').textContent = renew ? '新增續約方案' : (opts && opts.coach ? `新增${opts.coach}的方案` : '新增學員資料');
+  $('mdSub').textContent = renew
+    ? `「${name}」${opts.coach ? opts.coach + '的' : '目前的'}方案已用完。新增的方案會接在舊方案後面，舊方案扣完後的課自動算到這個方案。`
+    : (opts && opts.coach && S.students.includes(name) ? `這是「${name}」另外向${opts.coach}購買的方案，只扣${opts.coach}課表的課。` : '會同時加入「學員姓名」和「學員方案」。');
+  $('mdName').value = name;
+  $('mdTotal').value = total;
+  $('mdPrice').value = '';
+  $('mdStartNote').textContent = start
+    ? `第一堂課會設為 ${start}，之後可在學員頁或 Google Sheet 的「學員方案」修改。`
+    : '第一堂課會在這個方案開始扣堂時，自動回填到 Google Sheet。';
+  $('modal').classList.remove('hidden');
+  syncPriceWarn();
+  setTimeout(() => $('mdPrice').focus(), 50);
+}
+$('mdLater').onclick = () => $('modal').classList.add('hidden');
+function fillCoachSelect(sel, value) {
+  sel.innerHTML = '';
+  sel.append(el('option', { value: '', textContent: '不指定（任何教練的課都扣這個方案）' }));
+  [...new Set([].concat(S.coaches || [], value ? [value] : []))].forEach(c => sel.append(el('option', { value: c, textContent: c })));
+  sel.value = value || '';
+}
+const syncPriceWarn = () => {
+  $('mdPriceWarn').classList.toggle('hidden', !!$('mdPrice').value);
+  $('edPriceWarn').classList.toggle('hidden', !!$('edPrice').value);
+};
+$('mdPrice').addEventListener('input', syncPriceWarn);
+$('edPrice').addEventListener('input', syncPriceWarn);
+$('mdOk').onclick = async () => {
+  const name = $('mdName').value.trim();
+  if (!name) return toast('請輸入學員姓名', true);
+  const price = $('mdPrice').value;
+  const plan = { start: S.mdStart || '', total: $('mdTotal').value, price, coach: $('mdCoach').value };
+  $('mdOk').disabled = true;
+  try {
+    const d = await api('addStudent', { name, plan });
+    S.students = d.students;
+    $('modal').classList.add('hidden');
+    if (S.mdFrom === 'report') {
+      if (!$('rptStudents').classList.contains('hidden')) loadStudents();
+      else if (!$('rptStudent').classList.contains('hidden')) loadStudent($('sdTitle').textContent, S.stuFrom);
+      else if (S.rptCoach) loadDetail(S.rptCoach);
+    } else {
+      $('inStudent').value = name;
+      const it = S.items[S.cur];
+      if (it && it.data) it.data.hasPlan = true;
+      fillStudentList();
+      checkStudent();
+    }
+    toast((d.planAdded ? `已新增「${name}」的方案` : `已加入「${name}」（同一天開始的方案已存在，未重複新增）`)
+      + (price ? '' : '。單堂價格未填，教練報表會顯示「未設定課費」，記得之後補上'), !price);
+    if (S.mdFrom === 'upload') {
+      const it2 = S.items[S.cur];
+      if (it2 && it2.data) {
+        try { const x = await api('existing', { student: name }); it2.data.planInfo = x.planInfo; it2.data.planInfoBy = x.planInfoBy; it2.data.hasPlan = x.hasPlan; } catch (e) {}
+        checkStudent();
+      }
+    }
+  } catch (e) {
+    toast('新增失敗：' + e.message, true);
+  } finally {
+    $('mdOk').disabled = false;
+  }
+};
+$('btnAddStudent').onclick = () => openStudentModal(S.barMode === 'renew' ? { mode: 'renew', coach: S.barCoach } : { coach: S.barCoach });
+
+const ck = s => String(s || '').trim().toLowerCase();
+function sheetCoach() { return $('inSheetCoach').value; }
+function fillSheetCoach(r) {
+  const sel = $('inSheetCoach');
+  sel.innerHTML = '';
+  sel.append(el('option', { value: '', textContent: '（未指定）' }));
+  S.coaches.forEach(c => sel.append(el('option', { value: c, textContent: c })));
+  // 預設：表頭寫的教練；沒有就用表上最多人簽的教練
+  let pick = (r.header_coaches || []).map(matchCoach).find(Boolean) || '';
+  if (!pick) {
+    const n = {};
+    (r.rows || []).forEach(x => { const c = matchCoach(x.coach); if (c) n[c] = (n[c] || 0) + 1; });
+    pick = Object.keys(n).sort((a, b) => n[b] - n[a])[0] || '';
+  }
+  sel.value = pick;
+}
+function curPlanInfo(it) {
+  const d = it && it.data;
+  if (!d) return null;
+  return (d.planInfoBy && d.planInfoBy[ck(sheetCoach())]) || d.planInfo;
+}
+
+// 教練名稱比對：不分大小寫、忽略空白與標點，例如 woody → Woody
+function matchCoach(name) {
+  const norm = x => String(x || '').toLowerCase().replace(/[\s.。．·]/g, '');
+  const n = norm(name);
+  if (!n) return '';
+  const al = S.coachAliases || {};
+  return S.coaches.find(c => norm(c) === n)
+    || S.coaches.find(c => (al[c] || []).some(a => norm(a) === n))
+    || S.coaches.find(c => norm(c).startsWith(n) || n.startsWith(norm(c)))
+    || '';
+}
+// 不需要代簽判斷：把備註中提到代簽、他人簽名的句子移除
+function cleanNote(note) {
+  return String(note || '').split(/[；;，,。]/).map(x => x.trim())
+    .filter(x => x && !/代簽|他人|筆跡|非表頭學員|簽名者/.test(x)).join('；');
+}
+
+function rowCard(row, prev, otherSameDay) {
+  row = { ...row, coach: matchCoach(row.coach), row_note: cleanNote(row.row_note) };
+  const flags = [];
+  const isDone = prev && prev.status === '計薪' && (!row.coach || row.coach === prev.coach);
+  if (prev && prev.status === '計薪' && row.coach && row.coach !== prev.coach) flags.push([`與已入帳紀錄的教練不同（原為 ${prev.coach}）`, 'red']);
+  if (prev && prev.status !== '計薪') flags.push([`先前狀態：${prev.status}`, '']);
+  if (!prev && row.date && row.date < prevMonthStart()) flags.push(['早於上個月，請確認日期', '']);
+  if (otherSameDay) flags.push([`同一天已有「${otherSameDay.join('、')}」課表的課，這是另一堂嗎？`, '']);
+  if (row.date_inferred) flags.push(['日期沿用上一列', '']);
+  if (row.corrected) flags.push(['有塗改', '']);
+  if (row.uncertain) flags.push(['看不清楚', 'red']);
+  if (!row.date) flags.push(['缺日期', 'red']);
+  if (row.student_signed && !row.coach) flags.push(['缺教練簽名', '']);
+
+  const notes = [];
+  if (row.row_note) notes.push(row.row_note);
+
+  const chip = el('span', { class: 'chip' });
+  const card = el('div', { class: 'row' });
+  const date = el('input', { type: 'date', class: 'f-date', value: row.date || '' });
+  const coach = el('select', { class: 'f-coach' }, el('option', { value: '', textContent: '待指派' }));
+  S.coaches.forEach(c => coach.append(el('option', { value: c, textContent: c, selected: c === row.coach })));
+  const signed = el('input', { type: 'checkbox', class: 'f-signed', checked: !!row.student_signed });
+  const note = el('input', { type: 'text', class: 'f-note', value: notes.join('；') });
+
+  if (prev) card.dataset.prev = '1';
+  if (isDone && !row.coach) coach.value = prev.coach; // 已入帳的列沿用原教練，避免送出時被當成變動
+  const update = () => {
+    const st = statusOf(signed.checked, coach.value);
+    chip.className = 'chip ' + (isDone ? 'done' : st.key);
+    chip.textContent = isDone ? '已入帳' : st.label;
+    card.className = 'row s-' + st.key + (isDone ? ' done' : '');
+    recount();
+  };
+  [coach, signed].forEach(x => x.addEventListener('change', update));
+  signed.addEventListener('change', () => checkStudent());
+
+  card.append(...[
+    el('div', { class: 'row-head' }, [el('span', { class: 'no', textContent: '#' + row.row_no }), date, chip]),
+    flags.length ? el('div', { class: 'flags' }, flags.map(([t, c]) => el('span', { class: 'flag ' + c, textContent: t }))) : null,
+    el('div', { class: 'row-grid' }, [
+      el('div', {}, [el('label', { textContent: '教練' }), coach]),
+      el('div', {}, [el('label', { textContent: '學生簽到' }), el('div', { class: 'toggle' }, [signed, el('span', { textContent: '已簽到' })])]),
+      el('div', { class: 'note' }, [el('label', { textContent: '備註' }), note]),
+    ]),
+  ].filter(Boolean));
+  update();
+  return card;
+}
+
+function collectRows() {
+  return [...document.querySelectorAll('#rows .row')].map(c => ({
+    date: c.querySelector('.f-date').value,
+    coach: c.querySelector('.f-coach').value,
+    studentSigned: c.querySelector('.f-signed').checked,
+    signer: '',
+    note: c.querySelector('.f-note').value.trim(),
+  }));
+}
+
+function recount() {
+  const cards = [...document.querySelectorAll('#rows .row:not(.done)')];
+  const done = document.querySelectorAll('#rows .row.done').length;
+  const n = { pay: 0, pend: 0, none: 0 };
+  cards.forEach(c => n[statusOf(c.querySelector('.f-signed').checked, c.querySelector('.f-coach').value).key]++);
+  $('nPay').textContent = n.pay; $('nPend').textContent = n.pend; $('nNone').textContent = n.none;
+  $('barSum').textContent = `新增 ${cards.length} 筆｜計薪 ${n.pay}・待確認 ${n.pend}・不計 ${n.none}` + (done ? `｜已入帳 ${done}` : '');
+}
+
+function goNext() {
+  const next = S.items.findIndex((it, i) => i > S.cur && !['saved', 'skipped'].includes(it.status));
+  const any = next >= 0 ? next : S.items.findIndex(it => !['saved', 'skipped'].includes(it.status));
+  if (any < 0) return finish();
+  S.cur = any;
+  renderedIndex = -1;
+  refresh();
+}
+
+$('btnSave').onclick = async () => {
+  const it = S.items[S.cur];
+  const student = $('inStudent').value.trim();
+  if (!student) return toast('請輸入學員姓名', true);
+  const rows = collectRows();
+  const missing = rows.filter(r => !r.date && (r.studentSigned || r.coach)).length;
+  if (missing) return toast(`有 ${missing} 筆缺日期，請補上`, true);
+
+  $('btnSave').disabled = true;
+  const label = $('btnSave').textContent;
+  $('btnSave').textContent = '儲存中…';
+  try {
+    it.saveResult = await api('save', { payload: { student, operator: S.name, fileUrl: it.data.fileUrl, rows, sheetCoach: sheetCoach() } });
+    it.student = student;
+    it.savedRows = rows;
+    it.status = 'saved';
+    toast(`第 ${S.cur + 1} 張已儲存`);
+    goNext();
+  } catch (e) {
+    toast('儲存失敗：' + e.message, true);
+    $('btnSave').disabled = false;
+    $('btnSave').textContent = label;
+  }
+};
+
+$('btnSkip').onclick = () => {
+  const it = S.items[S.cur];
+  if (it.status === 'ready' && !confirm('略過這張？辨識結果不會儲存。')) return;
+  it.status = 'skipped';
+  goNext();
+};
+
+$('btnRetry').onclick = () => {
+  const it = S.items[S.cur];
+  it.status = 'waiting';
+  it.error = '';
+  refresh();
+  runQueue();
+};
+
+/* ---------- 完成 ---------- */
+function finish() {
+  keepAwake(false);
+  const saved = S.items.filter(it => it.status === 'saved');
+  const t = { added: 0, updated: 0, unchanged: 0, conflicts: [] };
+  saved.forEach(it => {
+    t.added += it.saveResult.added; t.updated += it.saveResult.updated; t.unchanged += it.saveResult.unchanged;
+    it.saveResult.conflicts.forEach(c => t.conflicts.push(`${it.student}｜${c}`));
+  });
+  $('rAdded').textContent = t.added; $('rUpdated').textContent = t.updated; $('rSame').textContent = t.unchanged;
+  const list = $('doneList');
+  list.innerHTML = '';
+  S.items.forEach((it, i) => list.append(el('li', { class: 'clickable', on: { click: () => openSaved(i) } }, [
+    el('span', { textContent: `第 ${i + 1} 張｜${it.student || it.file.name}` }),
+    el('span', { class: it.status === 'saved' ? '' : 'muted',
+      textContent: (it.status === 'saved' ? `新增 ${it.saveResult.added}・更新 ${it.saveResult.updated}・未變動 ${it.saveResult.unchanged}` : '已略過') + '  ›' }),
+  ])));
+  const cf = $('rConflicts');
+  if (t.conflicts.length) {
+    cf.textContent = `有 ${t.conflicts.length} 筆與既有紀錄的教練不同，沒有覆蓋，請人工確認：\n` + t.conflicts.join('\n');
+    cf.classList.remove('hidden');
+  } else cf.classList.add('hidden');
+  show('stDone');
+}
+
+/* ---------- 處理完成後回看某一張 ---------- */
+function openSaved(i) {
+  const it = S.items[i];
+  $('svTitle').textContent = `第 ${i + 1} 張｜${it.student || it.file.name}`;
+  $('svSub').textContent = it.status === 'saved'
+    ? `新增 ${it.saveResult.added}・更新 ${it.saveResult.updated}・未變動 ${it.saveResult.unchanged}`
+    : '這張已略過，沒有寫入資料。';
+  $('svImg').src = it.url;
+  const body = $('svBody');
+  body.innerHTML = '';
+  const rows = it.savedRows || [];
+  if (!rows.length) body.append(el('tr', {}, el('td', { colSpan: 4, textContent: it.status === 'saved' ? '沒有資料' : '—' })));
+  rows.forEach(r => {
+    const st = statusOf(r.studentSigned, r.coach);
+    body.append(el('tr', {}, [
+      el('td', { textContent: r.date || '—' }),
+      el('td', { textContent: r.coach || '待指派' }),
+      el('td', {}, el('span', { class: 'chip ' + st.key, textContent: st.label })),
+      el('td', { class: 'note-cell', textContent: r.note || '' }),
+    ]));
+  });
+  $('btnSvStudent').classList.toggle('hidden', it.status !== 'saved');
+  $('btnSvStudent').onclick = () => { $('btnReport').onclick(); loadStudent(it.student, 'students'); };
+  show('stSaved');
+}
+$('btnSvBack').onclick = () => show('stDone');
+$('svImg').onclick = () => { $('lightImg').src = $('svImg').src; $('lightbox').classList.remove('hidden'); };
+
+$('btnNext').onclick = () => {
+  S.items.forEach(it => URL.revokeObjectURL(it.url));
+  S.items = []; S.cur = -1; renderedIndex = -1;
+  $('rows').innerHTML = '';
+  renderPicked();
+  show('stPick');
+};
+
+/* ---------- 放大照片 ---------- */
+$('reviewImg').onclick = () => { $('lightImg').src = $('reviewImg').src; $('lightbox').classList.remove('hidden'); };
+function closeLightbox() { $('lightbox').classList.add('hidden'); $('lightbox').classList.remove('zoom'); }
+$('lbClose').onclick = e => { e.stopPropagation(); closeLightbox(); };
+$('lightImg').onclick = e => { e.stopPropagation(); $('lightbox').classList.toggle('zoom'); };
+$('lightbox').onclick = e => { if (e.target === $('lightbox')) closeLightbox(); };
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
+
+window.addEventListener('beforeunload', e => {
+  if (S.items.some(it => ['waiting', 'processing', 'ready'].includes(it.status))) { e.preventDefault(); e.returnValue = ''; }
+});
+
+/* ---------- 報表 ---------- */
+let lastStage = 'stPick';
+(function initMonth() {
+  const d = new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth() - 1);
+  $('inMonth').value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+})();
+$('btnReport').onclick = () => {
+  const cur = ['stPick', 'stReview', 'stDone', 'stSaved'].find(id => !$(id).classList.contains('hidden'));
+  if (cur) lastStage = cur;
+  ['stPick', 'stReview', 'stDone', 'stSaved'].forEach(id => $(id).classList.add('hidden'));
+  $('bar').classList.add('hidden'); document.body.classList.remove('has-bar');
+  $('stReport').classList.remove('hidden');
+  loadReport();
+};
+$('btnBack').onclick = () => {
+  $('stReport').classList.add('hidden');
+  $(lastStage).classList.remove('hidden');
+  if (lastStage === 'stReview') refresh();
+};
+$('inMonth').onchange = () => (S.rptCoach ? loadDetail(S.rptCoach) : loadReport());
+const money = n => 'NT$' + Number(n || 0).toLocaleString('zh-TW');
+function rptMsg(body, cols, text) {
+  body.innerHTML = '';
+  body.append(el('tr', {}, el('td', { colSpan: cols, textContent: text })));
+}
+async function loadReport() {
+  S.rptCoach = '';
+  showRptView('rptSummary');
+  const body = $('rptBody');
+  rptMsg(body, 3, '載入中…');
+  try {
+    const d = await api('summary', { month: $('inMonth').value });
+    body.innerHTML = '';
+    d.rows.forEach(r => body.append(el('tr', {}, [
+      el('td', {}, el('a', { textContent: r.coach, on: { click: () => loadDetail(r.coach) } })),
+      el('td', { class: 'n', textContent: r.count }),
+      el('td', { class: 'n' }, [money(r.amount), r.missing ? el('small', { textContent: `${r.missing} 堂未設定課費` }) : null]),
+    ])));
+    body.append(el('tr', { class: 'total' }, [
+      el('td', { textContent: '合計' }),
+      el('td', { class: 'n', textContent: d.total }),
+      el('td', { class: 'n', textContent: money(d.totalAmount) }),
+    ]));
+  } catch (e) {
+    rptMsg(body, 3, '讀取失敗：' + e.message);
+  }
+}
+async function loadDetail(coach) {
+  S.rptCoach = coach;
+  showRptView('rptDetail');
+  const [y, m] = $('inMonth').value.split('-');
+  $('dtTitle').textContent = `${coach}｜${y} 年 ${Number(m)} 月`;
+  $('dtLines').textContent = '載入中…';
+  $('dtMissing').classList.add('hidden');
+  const body = $('dtBody');
+  body.innerHTML = '';
+  try {
+    const d = await api('coachDetail', { month: $('inMonth').value, coach });
+    const box = $('dtLines');
+    box.innerHTML = '';
+    if (!d.groups.length) box.textContent = '這個月沒有可計算的課。';
+    d.groups.forEach(g => box.append(el('div', { textContent: `課費 ${money(g.fee)} × ${g.count} 堂 = ${money(g.subtotal)}` })));
+    if (d.groups.length) box.append(el('div', {}, ['總計金額 ', el('b', { textContent: money(d.total) }), `（共 ${d.count - d.missing} 堂）`]));
+    if (d.missing) {
+      const ratioMissing = d.rows.some(r => r.fee === null && /分成比例/.test(r.reason || ''));
+      const overCnt = d.rows.filter(r => r.over).length;
+      $('dtMissing').textContent = `有 ${d.missing} 堂還沒有設定課費，沒有算進金額。點下方表格中的連結，就可以直接新增該學員的方案。`
+        + (overCnt ? `其中 ${overCnt} 堂是學員已用完購買堂數，需要新增續約方案。` : '')
+        + (ratioMissing ? `另外，「教練名單」B 欄還沒有填 ${coach} 的分成比例，請到 Google Sheet 補上。` : '');
+      $('dtMissing').classList.remove('hidden');
+    }
+    if (!d.rows.length) rptMsg(body, 3, '沒有資料');
+    d.rows.forEach(r => body.append(el('tr', {}, [
+      el('td', { textContent: r.date }),
+      el('td', {}, el('a', { textContent: r.student, on: { click: () => loadStudent(r.student, 'coachDetail') } })),
+      r.fee === null
+        ? el('td', { class: 'n warn' }, (r.over || /超出購買堂數/.test(r.reason || ''))
+            ? el('a', { class: 'set-fee', textContent: '超出方案，新增續約 ›', on: { click: () => openStudentModal({ from: 'report', mode: 'renew', name: r.student, start: '', coach: r.group || '' }) } })
+            : (r.noPrice || /單堂原價/.test(r.reason || ''))
+            ? el('a', { class: 'set-fee', textContent: '未填單堂價格 ›', on: { click: () => loadStudent(r.student, 'coachDetail', r.planRow || 'current') } })
+            : /學員方案/.test(r.reason || '')
+            ? el('a', { class: 'set-fee', textContent: '未設定課費 ›', on: { click: () => openStudentModal({ from: 'report', name: r.student, start: '' }) } })
+            : el('a', { class: 'set-fee', textContent: '未設定分成比例 ›', on: { click: () => toast(`${r.reason}。請到 Google Sheet「教練名單」B 欄填入比例（例如 50%）。`, true) } }))
+        : el('td', { class: 'n', textContent: money(r.fee) }),
+    ])));
+  } catch (e) {
+    $('dtLines').textContent = '讀取失敗：' + e.message;
+  }
+}
+$('btnBackSummary').onclick = loadReport;
+
+/* ---------- 報表分頁：教練／學員 ---------- */
+function showRptView(v) {
+  ['rptSummary', 'rptDetail', 'rptStudents', 'rptStudent'].forEach(id => $(id).classList.toggle('hidden', id !== v));
+  const coachSide = v === 'rptSummary' || v === 'rptDetail';
+  $('inMonth').style.visibility = coachSide ? 'visible' : 'hidden';
+  document.querySelectorAll('.rtab').forEach(b => b.classList.toggle('on', (b.dataset.v === 'coach') === coachSide));
+  window.scrollTo({ top: 0 });
+}
+document.querySelectorAll('.rtab').forEach(b => b.onclick = () => (b.dataset.v === 'coach' ? loadReport() : loadStudents()));
+
+S.stuSortAsc = true;
+$('thRemain').onclick = () => { S.stuSortAsc = !S.stuSortAsc; renderStudents(); };
+async function loadStudents() {
+  S.rptCoach = '';
+  showRptView('rptStudents');
+  rptMsg($('stuBody'), 4, '載入中…');
+  try {
+    S.stuRows = (await api('students')).rows;
+    renderStudents();
+  } catch (e) { rptMsg($('stuBody'), 4, '讀取失敗：' + e.message); }
+}
+function renderStudents() {
+  $('thRemain').textContent = '剩餘堂數 ' + (S.stuSortAsc ? '↑' : '↓');
+  const key = r => (r.remaining === null ? 99999 : r.remaining);
+  const q = ($('stuQ').value || '').trim().toLowerCase();
+  $('stuQx').classList.toggle('hidden', !q);
+  const rows = [...(S.stuRows || [])].filter(r => !q || r.student.toLowerCase().includes(q)).sort((a, b) => (S.stuSortAsc ? key(a) - key(b) : key(b) - key(a)) || a.student.localeCompare(b.student));
+  const body = $('stuBody');
+  body.innerHTML = '';
+  if (!rows.length) return rptMsg(body, 4, q ? `找不到「${q}」` : '沒有學員資料');
+  rows.forEach(r => body.append(el('tr', {}, [
+    el('td', {}, [el('a', { textContent: r.student, on: { click: () => loadStudent(r.student, 'students') } }),
+      r.track !== null && r.track !== undefined ? el('span', { class: 'track-tag', textContent: r.track || '未指定教練' }) : null]),
+    el('td', { class: 'n' }, r.hasPlan
+      ? (r.remaining !== null && r.remaining <= 0
+          ? el('a', { class: 'set-fee' + (r.remaining < 0 ? ' over' : ''), textContent: (r.remaining < 0 ? `超出 ${-r.remaining}` : '0') + ' ›', title: '新增續約方案',
+              on: { click: () => openStudentModal({ from: 'report', mode: 'renew', name: r.student, start: '', coach: r.track || '' }) } })
+          : el('span', { class: r.remaining !== null && r.remaining <= 2 ? 'remain-low' : '', textContent: r.remaining === null ? '不限' : r.remaining }))
+      : el('a', { class: 'set-fee', textContent: '未設定方案 ›', on: { click: () => openStudentModal({ from: 'report', name: r.student, start: '', coach: r.track || '' }) } })),
+    el('td', { class: 'n', textContent: r.hasPlan ? `${r.used}／${r.bought || '—'}` : '—' }),
+    el('td', { class: 'n', textContent: r.lastClass || '—' }),
+  ])));
+}
+
+$('stuQ').addEventListener('input', () => renderStudents());
+$('stuQx').onclick = () => { $('stuQ').value = ''; renderStudents(); $('stuQ').focus(); };
+
+/* ---------- 學員頁 ---------- */
+async function loadStudent(student, from, editRow) {
+  S.stuFrom = from;
+  showRptView('rptStudent');
+  $('sdTitle').textContent = student;
+  $('sdBody').innerHTML = '';
+  $('sdBody').append(el('p', { textContent: '載入中…' }));
+  try {
+    renderStudentDetail(await api('studentDetail', { student }));
+    if (editRow && S.sd && S.sd.plans.length) {
+      const p = S.sd.plans.find(x => x.row === editRow) || S.sd.plans[S.sd.current];
+      openEditPlan(p);
+      setTimeout(() => $('edPrice').focus(), 50);
+    }
+  } catch (e) {
+    $('sdBody').innerHTML = '';
+    $('sdBody').append(el('div', { class: 'err-box', textContent: '讀取失敗：' + e.message }));
+  }
+}
+function renderStudentDetail(d) {
+  if (!Array.isArray(d.plans) || !Array.isArray(d.over) || typeof d.current !== 'number') {
+    throw new Error('後端程式還是舊版，請到 Apps Script 部署 v23（部署 → 管理部署 → 鉛筆 → 版本選「新版本」→ 部署），再重新整理這頁。');
+  }
+  S.sd = d;
+  const student = d.student;
+  const box = $('sdBody');
+  box.innerHTML = '';
+  $('btnEditPlan').classList.toggle('hidden', !d.plans.length);
+  if (!d.plans.length) {
+    box.append(el('div', { class: 'err-box' }, [
+      '這位學員還沒有方案資料，剩餘堂數無法計算。 ',
+      el('a', { class: 'set-fee', textContent: '新增方案 ›', on: { click: () => openStudentModal({ from: 'report', name: student, start: '' }) } }),
+    ]));
+    // 沒有方案也列出上課紀錄
+    const list = d.over || [];
+    const pend = list.filter(x => !x.coachSigned).length;
+    const last = list.length ? list[list.length - 1].date : '—';
+    box.append(el('div', { class: 'kpis' }, [
+      el('div', { class: 'kpi' }, [el('span', { textContent: '已上堂數' }), el('b', { textContent: list.length }),
+        pend ? el('small', { class: 'remain-low', textContent: `其中 ${pend} 堂教練未簽名` }) : null]),
+      el('div', { class: 'kpi' }, [el('span', { textContent: '最近上課' }), el('b', { textContent: last })]),
+    ]));
+    box.append(el('div', { class: 'plan-block' }, [el('p', { class: 'plan-head', textContent: '上課紀錄' }),
+      list.length ? sessionTable(list, true) : el('p', { class: 'rpt-note', textContent: '還沒有上課紀錄' })]));
+  } else {
+    const groups = (d.groups && d.groups.length) ? d.groups : [{ coach: '', idx: d.plans.map((_, i) => i), current: d.current, over: d.over }];
+    const multi = groups.length > 1 || !!groups[0].coach;
+    groups.forEach(g => {
+      if (multi) box.append(el('div', { class: 'group-head', textContent: g.coach ? `${g.coach}的方案` : '未指定教練的方案' }));
+      const renewOpts = { from: 'report', mode: 'renew', name: student, start: '', coach: g.coach || '' };
+      if (g.current < 0) {
+        box.append(el('div', { class: 'err-box' }, [`${g.coach || ''}沒有方案，這幾堂課無法扣堂。 `,
+          el('a', { class: 'set-fee', textContent: '新增方案 ›', on: { click: () => openStudentModal({ ...renewOpts, mode: undefined }) } })]));
+      } else {
+        const cur = d.plans[g.current];
+        box.append(planBlock(cur, true, g.idx.length));
+        if (g.over.length) {
+          box.append(el('div', { class: 'err-box' }, [
+            `已上的課超過購買堂數 ${g.over.length} 堂，這幾堂沒有對應方案。 `,
+            el('a', { class: 'set-fee', textContent: '新增續約方案 ›', on: { click: () => openStudentModal(renewOpts) } }),
+          ]));
+        } else if (cur.remaining !== null && cur.remaining <= 0) {
+          box.append(el('p', { class: 'rpt-note' }, ['目前方案已用完。 ',
+            el('a', { class: 'set-fee', textContent: '新增續約方案 ›', on: { click: () => openStudentModal(renewOpts) } })]));
+        }
+      }
+      if (g.over.length) box.append(el('div', { class: 'plan-block' }, [el('p', { class: 'plan-head', textContent: '超出購買堂數的課' }), sessionTable(g.over, true)]));
+      // 同組其他方案：新的在前，收合顯示
+      g.idx.filter(i => i !== g.current).reverse()
+        .forEach(i => box.append(planBlock(d.plans[i], false, g.idx.length, i > g.current ? '下一個方案（尚未開始）' : '先前方案')));
+    });
+  }
+}
+$('btnBackStudent').onclick = () => (S.stuFrom === 'students' ? loadStudents() : (S.rptCoach ? loadDetail(S.rptCoach) : loadReport()));
+
+function planBlock(p, isCurrent, count, label) {
+  const remainCls = p.remaining === null ? '' : (p.remaining < 0 ? 'remain-over' : (p.remaining <= 2 ? 'remain-low' : ''));
+  const remainTxt = p.remaining === null ? '不限' : p.remaining;
+  const kpis = el('div', { class: 'kpis' }, [
+    el('div', { class: 'kpi' }, [el('span', { textContent: '第一堂課' }), el('b', { textContent: p.start || '—' })]),
+    el('div', { class: 'kpi' }, [el('span', { textContent: '購買堂數' }), el('b', { textContent: p.total || '不限' })]),
+    el('div', { class: 'kpi' }, [el('span', { textContent: '單堂價格' }), p.price ? el('b', { textContent: money(p.price) })
+      : el('a', { class: 'set-fee', textContent: '未填 ›', on: { click: () => { openEditPlan(p); setTimeout(() => $('edPrice').focus(), 50); } } })]),
+    el('div', { class: 'kpi' }, [el('span', { textContent: '已上堂數' }), el('b', { textContent: p.used }),
+      p.prior ? el('small', { textContent: `含系統外 ${p.prior} 堂` }) : null,
+      p.pending ? el('small', { class: 'remain-low', textContent: `其中 ${p.pending} 堂教練未簽名` }) : null]),
+    el('div', { class: 'kpi big' }, [el('span', { textContent: '剩餘堂數' }), el('b', { class: remainCls, textContent: remainTxt })]),
+  ]);
+  const editLink = el('a', { class: 'edit-link', textContent: '編輯', on: { click: () => openEditPlan(p) } });
+  const head = el('p', { class: 'plan-head' }, [`${isCurrent ? '目前方案' : (label || '其他方案')}｜第 ${p.order} 個方案　`, editLink]);
+  const inner = [head, kpis, p.sessions.length ? sessionTable(p.sessions, true) : el('p', { class: 'rpt-note', textContent: '這個方案還沒有系統內的上課紀錄。' })];
+  if (isCurrent || count === 1) return el('div', { class: 'plan-block' }, inner);
+  return el('details', { class: 'plan-block' }, [el('summary', { textContent: `${label || '其他方案'}（第 ${p.order} 個）｜已上 ${p.used}／${p.total || '不限'} 堂` }), ...inner]);
+}
+
+/* ---------- 編輯方案 ---------- */
+function openEditPlan(p) {
+  S.editRow = p.row;
+  $('edTitle').textContent = `編輯方案｜${S.sd.student}`;
+  $('edStart').value = p.start || '';
+  fillCoachSelect($('edCoach'), p.coach || '');
+  $('edTotal').value = p.total || '';
+  $('edPrice').value = p.price || '';
+  $('edUsed').value = p.used;
+  syncPriceWarn();
+  const inSys = p.used - (p.prior || 0);
+  $('edNote').textContent = `系統內有 ${inSys} 堂上課紀錄。若有導入系統前就上過的課，可以把已上堂數調高，差額會記在 Google Sheet「學員方案」的「系統外已上堂數」欄。`;
+  $('editModal').classList.remove('hidden');
+}
+$('btnEditPlan').onclick = () => S.sd && S.sd.plans.length && openEditPlan(S.sd.plans[S.sd.current]);
+$('edCancel').onclick = () => $('editModal').classList.add('hidden');
+$('edOk').onclick = async () => {
+  const fields = { start: $('edStart').value, total: $('edTotal').value, price: $('edPrice').value, used: $('edUsed').value, coach: $('edCoach').value };
+  $('edOk').disabled = true;
+  try {
+    const d = await api('updatePlan', { student: S.sd.student, row: S.editRow, fields });
+    $('editModal').classList.add('hidden');
+    renderStudentDetail(d);
+    toast(fields.price ? '方案已更新，Google Sheet 也同步修改了' : '方案已更新。單堂價格未填，教練報表會顯示「未設定課費」', !fields.price);
+  } catch (e) {
+    toast('更新失敗：' + e.message, true);
+  } finally {
+    $('edOk').disabled = false;
+  }
+};
+
+function sessionTable(list, editable) {
+  const wrap = el('div', { class: 'sess-wrap' });
+  const draw = (editing) => {
+    wrap.innerHTML = '';
+    if (editing) setTopH();
+    const bar = el('div', { class: 'sess-bar' + (editing ? ' editing' : '') });
+    const rows = [];
+    const body = list.map((s, i) => {
+      const photo = el('td', { class: 'n' }, s.fileId ? el('button', { class: 'photo-btn', textContent: '查看', on: { click: () => showPhoto(s.fileId) } }) : '—');
+      if (!editing) return el('tr', {}, [
+        el('td', { textContent: i + 1 }),
+        el('td', { textContent: s.date }),
+        el('td', {}, [s.coach || '—', s.planCoach && s.coach && ck(s.planCoach) !== ck(s.coach) ? el('span', { class: 'track-tag', textContent: `代${s.planCoach}` }) : null]),
+        el('td', {}, s.coachSigned ? el('span', { class: 'chip-ok', textContent: '已簽名' }) : el('span', { class: 'chip-pend', textContent: '未簽名' })),
+        photo,
+      ]);
+      const date = el('input', { type: 'date', class: 'cell-in', value: s.date });
+      const coach = el('select', { class: 'cell-in' }, [el('option', { value: '', textContent: '（未填）' })]);
+      [...new Set([].concat(S.coaches || [], s.coach ? [s.coach] : []))].forEach(c => coach.append(el('option', { value: c, textContent: c, selected: c === s.coach })));
+      const status = el('select', { class: 'cell-in' }, [
+        el('option', { value: '計薪', textContent: '已簽名', selected: s.status === '計薪' }),
+        el('option', { value: '待確認', textContent: '未簽名', selected: s.status === '待確認' }),
+        el('option', { value: '不計', textContent: '不計（移除）' }),
+      ]);
+      const tr = el('tr', {}, [el('td', { textContent: i + 1 }), el('td', {}, date), el('td', {}, coach), el('td', {}, status),
+        el('td', { class: 'n' }, s.fileId ? el('button', { class: 'photo-btn', textContent: '照片', on: { click: () => showPhoto(s.fileId) } }) : '—')]);
+      const mark = () => {
+        const changed = date.value !== s.date || coach.value !== (s.coach || '') || status.value !== s.status;
+        tr.classList.toggle('row-changed', changed);
+        tr.classList.toggle('row-removed', status.value === '不計');
+      };
+      [date, coach, status].forEach(x => x.addEventListener('change', mark));
+      rows.push({ s, date, coach, status });
+      return tr;
+    });
+    if (editable && !editing) {
+      bar.append(el('button', { class: 'btn ghost sm', textContent: '編輯上課紀錄', on: { click: () => draw(true) } }));
+    }
+    if (editing) {
+      const save = el('button', { class: 'btn sm', textContent: '儲存全部' });
+      save.onclick = async () => {
+        const edits = rows.filter(r => r.date.value !== r.s.date || r.coach.value !== (r.s.coach || '') || r.status.value !== r.s.status)
+          .map(r => ({ date: r.s.date, seq: r.s.seq, planCoach: r.s.planCoach || '', newDate: r.date.value, coach: r.coach.value, status: r.status.value }));
+        if (!edits.length) return draw(false);
+        if (edits.some(x => !x.newDate)) return toast('日期不能空白', true);
+        if (edits.some(x => x.status === '計薪' && !x.coach)) return toast('「已簽名」的課要選教練', true);
+        const removed = edits.filter(x => x.status === '不計').length;
+        if (removed && !confirm(`有 ${removed} 堂會改成「不計」，不再算已上堂數，也不會計薪。確定儲存？`)) return;
+        save.disabled = true;
+        try {
+          const d = await api('updateSessions', { student: S.sd.student, edits, operator: S.name });
+          renderStudentDetail(d);
+          toast(`已更新 ${edits.length} 堂，Google Sheet 也同步修改了`);
+        } catch (e) { save.disabled = false; toast('儲存失敗：' + e.message, true); }
+      };
+      bar.append(el('span', { class: 'sess-hint', textContent: '表上都是學員有簽到的課；改完一次按儲存，有改動的列會標黃色' }),
+        el('button', { class: 'btn ghost sm', textContent: '取消', on: { click: () => draw(false) } }), save);
+    }
+    wrap.append(bar, el('div', { class: 'sess-scroll' }, el('table', { class: 'rpt' + (editing ? ' editing' : '') }, [
+      el('thead', {}, el('tr', {}, [el('th', { textContent: '#' }), el('th', { textContent: '日期' }), el('th', { textContent: '教練' }), el('th', { textContent: '教練簽名' }), el('th', { class: 'n', textContent: '照片' })])),
+      el('tbody', {}, body),
+    ])));
+    if (editing) wrap.append(el('div', { class: 'sess-bottom' }));
+  };
+  draw(false);
+  return wrap;
+}
+
+const photoCache = {};
+async function showPhoto(fileId) {
+  try {
+    if (!photoCache[fileId]) {
+      toast('載入照片中…');
+      const d = await api('photo', { fileId });
+      photoCache[fileId] = `data:${d.mimeType};base64,${d.base64}`;
+    }
+    $('lightImg').src = photoCache[fileId];
+    $('lightbox').classList.remove('hidden');
+  } catch (e) { toast('照片載入失敗：' + e.message, true); }
+}
+// 從報表設定方案：學員完全沒有方案 → 開始日留空（適用所有日期）；已有方案但這堂早於方案 → 用這位學員最早一堂未設定的日期
+function planStartFor(rows, r) {
+  if (/沒有這位學生/.test(r.reason || '')) return '';
+  const dates = rows.filter(x => x.student === r.student && x.fee === null).map(x => x.date).sort();
+  return dates[0] || r.date;
+}
+
+/* ---------- 啟動 ---------- */
+(function boot() {
+  const code = load('pt_code'), name = load('pt_name');
+  $('inName').value = name;
+  if (code && name) login(code, name, true);
+  else $('loginView').classList.remove('hidden');
+})();
+</script>
+</body>
+</html>
