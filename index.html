@@ -4,10 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#111111">
-<!-- 教練課簽到 v33（未設定方案的學員也能看上課紀錄） -->
+<!-- 教練課簽到 v35（修正：只改適用教練無法儲存、錯誤提示被彈窗蓋住） -->
 <title>教練課簽到</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
   /* ===== 設定：把 Apps Script 部署網址貼在 index.html 最下方的 API_URL ===== */
   :root {
@@ -28,7 +26,7 @@
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; background: var(--bg); color: var(--ink);
-    font-family: "Noto Sans TC", -apple-system, "PingFang TC", sans-serif; font-size: 15px; line-height: 1.5; }
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif; font-size: 15px; line-height: 1.5; }
   button, input, select { font: inherit; color: inherit; }
   .hidden { display: none !important; }
 
@@ -149,7 +147,7 @@
 
   /* Toast & lightbox */
   .toast { position: fixed; left: 50%; bottom: 180px; transform: translateX(-50%); background: var(--ink); color: #fff;
-    padding: 10px 16px; border-radius: var(--r); font-size: 14px; z-index: 50; max-width: 90vw; }
+    padding: 10px 16px; border-radius: var(--r); font-size: 14px; z-index: 100; max-width: 90vw; }
   .toast.err { background: var(--red); }
 
   /* Multi-photo picker */
@@ -295,6 +293,9 @@
   .stu-search input:focus { outline: 2px solid var(--ink); outline-offset: -1px; }
   .stu-search input::-webkit-search-cancel-button { display: none; }
   .stu-qx { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); border: none; background: none; font-size: 22px; color: var(--ink-3); width: 36px; height: 36px; cursor: pointer; }
+  .sync-bar { position: sticky; top: var(--top-h, 72px); height: 2px; z-index: 11; overflow: hidden; margin-bottom: -2px; }
+  .sync-bar.on::after { content: ''; position: absolute; left: -40%; width: 40%; height: 100%; background: var(--ink); animation: sync 1s linear infinite; }
+  @keyframes sync { to { left: 100%; } }
   /* ===== 手機版面優化 v28 ===== */
   input[type=date] { -webkit-appearance: none; appearance: none; min-width: 0; max-width: 100%; box-sizing: border-box; min-height: 42px; text-align: left; }
   input[type=date]::-webkit-date-and-time-value { text-align: left; margin: 0; }
@@ -351,6 +352,7 @@
     <div class="who"><span id="whoName"></span><button id="btnReport">報表</button><button id="btnLogout">登出</button></div>
   </header>
 
+  <div id="syncBar" class="sync-bar"></div>
   <main class="wrap">
     <input type="file" id="file" accept="image/*" multiple hidden>
 
@@ -601,17 +603,56 @@ async function api(action, body = {}) {
   return j.data;
 }
 
+/* ---------- 先顯示上次的資料，再背景更新（stale-while-revalidate） ---------- */
+const CK = 'pc_';
+function cacheGet(k) { try { return JSON.parse(localStorage.getItem(CK + k)); } catch (e) { return null; } }
+function cacheSet(k, v) { try { localStorage.setItem(CK + k, JSON.stringify(v)); } catch (e) {} }
+function cacheClear() { try { Object.keys(localStorage).filter(k => k.startsWith(CK)).forEach(k => localStorage.removeItem(k)); } catch (e) {} }
+let viewSeq = 0;
+function setSyncing(on) { $('syncBar').classList.toggle('on', on); }
+// render(data, fromCache)；換頁後舊的請求回來不會覆蓋新畫面
+async function swr(action, body, render, onError) {
+  const my = ++viewSeq;
+  const k = action + JSON.stringify(body || {});
+  const cached = cacheGet(k);
+  if (cached) render(cached, true);
+  setSyncing(true);
+  try {
+    const fresh = await api(action, body);
+    cacheSet(k, fresh);
+    if (my !== viewSeq) return;
+    if (!cached || JSON.stringify(cached) !== JSON.stringify(fresh)) render(fresh, false);
+    return fresh;
+  } catch (e) {
+    if (my !== viewSeq) return;
+    if (cached) toast('無法更新，目前顯示的是上次的資料：' + e.message, true);
+    else onError(e);
+  } finally {
+    if (my === viewSeq) setSyncing(false);
+  }
+}
+
 /* ---------- 登入 ---------- */
 async function login(code, name, silent) {
   S.code = code; S.name = name;
-  try {
-    const d = await api('init');
+  const apply = d => {
     S.coaches = d.coaches; S.students = d.students; S.coachAliases = d.coachAliases || {};
-    store('pt_code', code); store('pt_name', name);
     $('whoName').textContent = name;
     $('loginView').classList.add('hidden');
     $('appView').classList.remove('hidden');
+  };
+  const cached = silent ? cacheGet('init') : null;
+  if (cached) apply(cached); // 自動登入：先用上次的名單打開畫面
+  try {
+    const d = await api('init');
+    cacheSet('init', d);
+    store('pt_code', code); store('pt_name', name);
+    apply(d);
+    // 背景預先載入報表，點進去就有資料
+    setTimeout(() => { ['students', 'summary'].forEach(a => api(a, a === 'summary' ? { month: $('inMonth').value } : {}).then(x => cacheSet(a + JSON.stringify(a === 'summary' ? { month: $('inMonth').value } : {}), x)).catch(() => {})); }, 300);
   } catch (e) {
+    if (cached && e instanceof Error && !/存取碼/.test(e.message)) return; // 網路問題：沿用上次的資料
+    cacheClear();
     store('pt_code', null);
     $('loginView').classList.remove('hidden');
     $('appView').classList.add('hidden');
@@ -626,7 +667,7 @@ $('btnLogin').onclick = () => {
 };
 $('btnLogout').onclick = () => {
   if (S.running && !confirm('還有照片在處理中，確定要登出？')) return;
-  store('pt_code', null); location.reload();
+  store('pt_code', null); cacheClear(); location.reload();
 };
 
 /* ---------- 階段切換 ---------- */
@@ -1249,8 +1290,7 @@ async function loadReport() {
   showRptView('rptSummary');
   const body = $('rptBody');
   rptMsg(body, 3, '載入中…');
-  try {
-    const d = await api('summary', { month: $('inMonth').value });
+  await swr('summary', { month: $('inMonth').value }, d => {
     body.innerHTML = '';
     d.rows.forEach(r => body.append(el('tr', {}, [
       el('td', {}, el('a', { textContent: r.coach, on: { click: () => loadDetail(r.coach) } })),
@@ -1262,9 +1302,7 @@ async function loadReport() {
       el('td', { class: 'n', textContent: d.total }),
       el('td', { class: 'n', textContent: money(d.totalAmount) }),
     ]));
-  } catch (e) {
-    rptMsg(body, 3, '讀取失敗：' + e.message);
-  }
+  }, e => rptMsg(body, 3, '讀取失敗：' + e.message));
 }
 async function loadDetail(coach) {
   S.rptCoach = coach;
@@ -1275,8 +1313,9 @@ async function loadDetail(coach) {
   $('dtMissing').classList.add('hidden');
   const body = $('dtBody');
   body.innerHTML = '';
-  try {
-    const d = await api('coachDetail', { month: $('inMonth').value, coach });
+  await swr('coachDetail', { month: $('inMonth').value, coach }, d => {
+    body.innerHTML = '';
+    $('dtMissing').classList.add('hidden');
     const box = $('dtLines');
     box.innerHTML = '';
     if (!d.groups.length) box.textContent = '這個月沒有可計算的課。';
@@ -1304,9 +1343,7 @@ async function loadDetail(coach) {
             : el('a', { class: 'set-fee', textContent: '未設定分成比例 ›', on: { click: () => toast(`${r.reason}。請到 Google Sheet「教練名單」B 欄填入比例（例如 50%）。`, true) } }))
         : el('td', { class: 'n', textContent: money(r.fee) }),
     ])));
-  } catch (e) {
-    $('dtLines').textContent = '讀取失敗：' + e.message;
-  }
+  }, e => { $('dtLines').textContent = '讀取失敗：' + e.message; });
 }
 $('btnBackSummary').onclick = loadReport;
 
@@ -1326,10 +1363,7 @@ async function loadStudents() {
   S.rptCoach = '';
   showRptView('rptStudents');
   rptMsg($('stuBody'), 4, '載入中…');
-  try {
-    S.stuRows = (await api('students')).rows;
-    renderStudents();
-  } catch (e) { rptMsg($('stuBody'), 4, '讀取失敗：' + e.message); }
+  await swr('students', {}, d => { S.stuRows = d.rows; renderStudents(); }, e => rptMsg($('stuBody'), 4, '讀取失敗：' + e.message));
 }
 function renderStudents() {
   $('thRemain').textContent = '剩餘堂數 ' + (S.stuSortAsc ? '↑' : '↓');
@@ -1360,13 +1394,15 @@ $('stuQx').onclick = () => { $('stuQ').value = ''; renderStudents(); $('stuQ').f
 /* ---------- 學員頁 ---------- */
 async function loadStudent(student, from, editRow) {
   S.stuFrom = from;
+  S.sd = null;
+  $('btnEditPlan').classList.add('hidden');
   showRptView('rptStudent');
   $('sdTitle').textContent = student;
   $('sdBody').innerHTML = '';
   $('sdBody').append(el('p', { textContent: '載入中…' }));
   try {
-    renderStudentDetail(await api('studentDetail', { student }));
-    if (editRow && S.sd && S.sd.plans.length) {
+    const fresh = await swr('studentDetail', { student }, d => renderStudentDetail(d), e => { throw e; });
+    if (fresh && editRow && S.sd && S.sd.plans.length) {
       const p = S.sd.plans.find(x => x.row === editRow) || S.sd.plans[S.sd.current];
       openEditPlan(p);
       setTimeout(() => $('edPrice').focus(), 50);
@@ -1455,6 +1491,7 @@ function planBlock(p, isCurrent, count, label) {
 /* ---------- 編輯方案 ---------- */
 function openEditPlan(p) {
   S.editRow = p.row;
+  S.editPlan = p;
   $('edTitle').textContent = `編輯方案｜${S.sd.student}`;
   $('edStart').value = p.start || '';
   fillCoachSelect($('edCoach'), p.coach || '');
@@ -1469,10 +1506,13 @@ function openEditPlan(p) {
 $('btnEditPlan').onclick = () => S.sd && S.sd.plans.length && openEditPlan(S.sd.plans[S.sd.current]);
 $('edCancel').onclick = () => $('editModal').classList.add('hidden');
 $('edOk').onclick = async () => {
-  const fields = { start: $('edStart').value, total: $('edTotal').value, price: $('edPrice').value, used: $('edUsed').value, coach: $('edCoach').value };
+  const fields = { start: $('edStart').value, total: $('edTotal').value, price: $('edPrice').value, coach: $('edCoach').value };
+  // 已上堂數有改才送，避免只改教練時把系統外堂數算錯
+  if (S.editPlan && String($('edUsed').value) !== String(S.editPlan.used)) fields.used = $('edUsed').value;
   $('edOk').disabled = true;
   try {
     const d = await api('updatePlan', { student: S.sd.student, row: S.editRow, fields });
+    cacheSet('studentDetail' + JSON.stringify({ student: d.student }), d);
     $('editModal').classList.add('hidden');
     renderStudentDetail(d);
     toast(fields.price ? '方案已更新，Google Sheet 也同步修改了' : '方案已更新。單堂價格未填，教練報表會顯示「未設定課費」', !fields.price);
@@ -1534,6 +1574,7 @@ function sessionTable(list, editable) {
         save.disabled = true;
         try {
           const d = await api('updateSessions', { student: S.sd.student, edits, operator: S.name });
+    cacheSet('studentDetail' + JSON.stringify({ student: d.student }), d);
           renderStudentDetail(d);
           toast(`已更新 ${edits.length} 堂，Google Sheet 也同步修改了`);
         } catch (e) { save.disabled = false; toast('儲存失敗：' + e.message, true); }
